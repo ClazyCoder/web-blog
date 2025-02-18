@@ -1,10 +1,10 @@
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
 
-function ContentCard({ title, text }) {
+function ContentCard({ title, text, imgSrc }) {
     return (
-        <Card style={{ width: '18rem' }}>
-            <Card.Img variant="top" src="holder.js/100px180" />
+        <Card>
+            <Card.Img variant="top" src={imgSrc} style={{ height: '100px' }} />
             <Card.Body>
                 <Card.Title>{title}</Card.Title>
                 <Card.Text>
