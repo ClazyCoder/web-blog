@@ -1,9 +1,10 @@
+import React from 'react';
 import Nav from 'react-bootstrap/Nav';
 
-function Footer() {
+const Footer: React.FC = () => {
     return (
         <footer>
-            <Nav className="justify-content-center" bg="dark" data-bs-theme="dark" activeKey="/home">
+            <Nav className="justify-content-center" data-bs-theme="dark" activeKey="/home">
                 <Nav.Item>
                     <Nav.Link href="/">Home</Nav.Link>
                 </Nav.Item>
@@ -16,6 +17,6 @@ function Footer() {
             </Nav>
         </footer>
     );
-}
+};
 
-export default Footer;
+export default Footer; 

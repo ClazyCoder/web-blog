@@ -1,8 +1,9 @@
+import React from 'react';
 import Container from 'react-bootstrap/Container';
 import Nav from 'react-bootstrap/Nav';
 import Navbar from 'react-bootstrap/Navbar';
 
-function Header() {
+const Header: React.FC = () => {
     return (
         <header>
             <Navbar bg="dark" data-bs-theme="dark">
@@ -17,6 +18,6 @@ function Header() {
             </Navbar>
         </header>
     );
-}
+};
 
-export default Header;
+export default Header; 

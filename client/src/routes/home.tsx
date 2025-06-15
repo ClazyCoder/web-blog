@@ -1,11 +1,12 @@
+import React from 'react';
 import { BoardLayout } from "../layouts";
 
-function Home() {
+const Home: React.FC = () => {
     return (
         <div>
             <BoardLayout />
         </div>
     );
-}
+};
 
-export default Home;
+export default Home; 

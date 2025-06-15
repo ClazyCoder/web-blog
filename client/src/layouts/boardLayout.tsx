@@ -1,7 +1,8 @@
+import React from 'react';
 import ListGroup from 'react-bootstrap/ListGroup';
 import { ContentCard } from "../components";
 
-function BoardLayout() {
+const BoardLayout: React.FC = () => {
     return (
         <ListGroup variant="flush">
             <ListGroup.Item><ContentCard title="리액트 공부" text="리액트에 대한 공부" last_updated="2 hours ago" imgSrc="logo192.png" /></ListGroup.Item>
@@ -10,6 +11,6 @@ function BoardLayout() {
             <ListGroup.Item><ContentCard title="AI 동향파악" text="최신 AI기술 동향 파악" last_updated="2 hours ago" imgSrc="logo192.png" /></ListGroup.Item>
         </ListGroup>
     );
-}
+};
 
-export default BoardLayout;
+export default BoardLayout; 
