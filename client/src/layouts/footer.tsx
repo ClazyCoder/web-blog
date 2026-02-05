@@ -1,22 +1,38 @@
 import React from 'react';
-import Nav from 'react-bootstrap/Nav';
+import { NavLink } from 'react-router-dom';
 
 const Footer: React.FC = () => {
     return (
-        <footer>
-            <Nav className="justify-content-center" data-bs-theme="dark" activeKey="/home">
-                <Nav.Item>
-                    <Nav.Link href="/">Home</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                    <Nav.Link href="/board">Board</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                    <Nav.Link eventKey="disabled" disabled>Others</Nav.Link>
-                </Nav.Item>
-            </Nav>
+        <footer className="bg-gray-800 py-4">
+            <nav className="flex justify-center items-center gap-6">
+                <NavLink
+                    to="/"
+                    className={({ isActive }) =>
+                        `transition-colors duration-200 ${isActive
+                            ? 'text-white font-semibold'
+                            : 'text-gray-300 hover:text-white'
+                        }`
+                    }
+                >
+                    Home
+                </NavLink>
+                <NavLink
+                    to="/board"
+                    className={({ isActive }) =>
+                        `transition-colors duration-200 ${isActive
+                            ? 'text-white font-semibold'
+                            : 'text-gray-300 hover:text-white'
+                        }`
+                    }
+                >
+                    Board
+                </NavLink>
+                <span className="text-gray-500 cursor-not-allowed">
+                    Others
+                </span>
+            </nav>
         </footer>
     );
 };
 
-export default Footer; 
+export default Footer;
