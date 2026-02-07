@@ -2,11 +2,7 @@ import React from 'react';
 import { BoardLayout } from "../layouts";
 
 const Home: React.FC = () => {
-    return (
-        <div>
-            <BoardLayout />
-        </div>
-    );
+    return <BoardLayout />;
 };
 
 export default Home; 

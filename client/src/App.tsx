@@ -9,6 +9,9 @@ const App: React.FC = () => {
             <Routes>
                 <Route path="/" element={<CustomRoutes.Home />} />
                 <Route path="/board" element={<CustomRoutes.BoardList />} />
+                <Route path="/board/:id" element={<CustomRoutes.PageRoute />} />
+                <Route path="/editor" element={<CustomRoutes.Editor />} />
+                <Route path="/editor/:id" element={<CustomRoutes.Editor />} />
 
                 {/* 404 페이지 */}
                 <Route path="*" element={<NotFound />} />

@@ -11,13 +11,14 @@ const Header: React.FC = () => {
                         to="/"
                         className="text-white text-xl font-bold hover:text-gray-300 transition-colors"
                     >
-                        메뉴
+                        YSG Blog
                     </Link>
 
                     {/* NavLink로 active 상태 자동 처리 */}
                     <div className="flex items-center gap-6">
                         <NavLink
                             to="/"
+                            end
                             className={({ isActive }) =>
                                 `transition-colors duration-200 ${isActive
                                     ? 'text-white font-semibold'

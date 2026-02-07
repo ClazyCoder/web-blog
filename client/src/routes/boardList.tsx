@@ -1,11 +1,8 @@
 import React from 'react';
+import * as Layouts from "../layouts";
 
 const BoardList: React.FC = () => {
-    return (
-        <div>
-            게시판 목록
-        </div>
-    );
+    return <Layouts.ListLayout />;
 };
 
 export default BoardList; 

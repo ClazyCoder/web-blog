@@ -7,6 +7,7 @@ export interface ContentCardProps {
     text: string;
     last_updated: string;
     imgSrc: string;
+    tags?: string[];
 }
 
 const ContentCard: React.FC<ContentCardProps> = ({
@@ -14,7 +15,8 @@ const ContentCard: React.FC<ContentCardProps> = ({
     title,
     text,
     last_updated,
-    imgSrc
+    imgSrc,
+    tags = []
 }) => {
     const navigate = useNavigate();
 
@@ -25,14 +27,14 @@ const ContentCard: React.FC<ContentCardProps> = ({
     };
 
     return (
-        <div className="relative rounded-lg overflow-hidden shadow-lg">
+        <div className="relative rounded-lg overflow-hidden shadow-lg hover:shadow-2xl transition-shadow duration-300 cursor-pointer group">
             <img
                 src={imgSrc}
                 alt={title}
-                className="w-full h-[200px] object-cover"
+                className="w-full h-[200px] object-cover group-hover:scale-105 transition-transform duration-300"
             />
 
-            <div className="absolute inset-0 bg-black/40 p-4 flex flex-col justify-between">
+            <div className="absolute inset-0 bg-black/40 group-hover:bg-black/50 transition-colors duration-300 p-4 flex flex-col justify-between">
                 <div>
                     <h3 className="font-bold text-white text-xl mb-2">
                         {title}
@@ -40,6 +42,18 @@ const ContentCard: React.FC<ContentCardProps> = ({
                     <p className="text-white text-sm mb-2">
                         {text}
                     </p>
+                    {tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                            {tags.map((tag, index) => (
+                                <span
+                                    key={index}
+                                    className="inline-block px-2 py-0.5 text-xs font-medium bg-blue-500/80 hover:bg-blue-500 text-white rounded transition-colors"
+                                >
+                                    {tag}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <div className="space-y-2">
@@ -48,7 +62,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
                     </p>
                     <button
                         onClick={handleReadClick}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors"
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors"
                     >
                         Read
                     </button>
