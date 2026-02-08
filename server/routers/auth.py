@@ -2,14 +2,15 @@
 인증 관련 라우터
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, EmailStr
 from datetime import timedelta
 from auth import (
     create_access_token, 
     verify_password, 
     get_password_hash,
-    ACCESS_TOKEN_EXPIRE_MINUTES
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    get_current_user
 )
 
 router = APIRouter(
@@ -19,7 +20,7 @@ router = APIRouter(
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    username: str
     password: str
 
 
@@ -29,6 +30,12 @@ class UserRegister(BaseModel):
     username: str
 
 
+class UserInfo(BaseModel):
+    id: str
+    username: str
+    email: str
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -36,14 +43,21 @@ class Token(BaseModel):
 
 # TODO: 실제로는 데이터베이스 사용
 # 임시 사용자 데이터 (개발용)
-# 비밀번호 "password123"의 미리 해싱된 값
 fake_users_db = {}
 
 
 def _init_fake_db():
     """임시 DB 초기화 (지연 초기화)"""
     if not fake_users_db:
-        fake_users_db["user@example.com"] = {
+        # root 계정 추가
+        fake_users_db["root"] = {
+            "email": "root@admin.com",
+            "username": "root",
+            "hashed_password": get_password_hash("root"),
+            "user_id": "admin"
+        }
+        # 테스트 계정
+        fake_users_db["testuser"] = {
             "email": "user@example.com",
             "username": "testuser",
             "hashed_password": get_password_hash("password123"),
@@ -99,20 +113,20 @@ async def login(user_data: UserLogin):
     사용자 로그인
     
     Args:
-        user_data: 이메일, 비밀번호
+        user_data: 사용자명, 비밀번호
         
     Returns:
         JWT 액세스 토큰
     """
     _init_fake_db()  # DB 초기화
     
-    # TODO: 실제로는 데이터베이스에서 조회
-    user = fake_users_db.get(user_data.email)
+    # username으로 사용자 조회
+    user = fake_users_db.get(user_data.username)
     
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -120,14 +134,18 @@ async def login(user_data: UserLogin):
     if not verify_password(user_data.password, user["hashed_password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
     # 토큰 생성
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user["user_id"], "email": user["email"]},
+        data={
+            "sub": user["user_id"], 
+            "email": user["email"],
+            "username": user["username"]
+        },
         expires_delta=access_token_expires
     )
     
@@ -137,10 +155,28 @@ async def login(user_data: UserLogin):
     }
 
 
-@router.post("/refresh", response_model=Token)
-async def refresh_token(current_user: dict):
+@router.get("/me", response_model=UserInfo)
+async def get_me(current_user: dict = Depends(get_current_user)):
     """
-    토큰 갱신 (구현 예정)
+    현재 로그인한 사용자 정보 조회
+    
+    Returns:
+        사용자 정보
     """
-    # TODO: Refresh token 로직 구현
-    pass
+    _init_fake_db()
+    
+    user_id = current_user.get("user_id")
+    
+    # fake_users_db에서 사용자 찾기
+    for username, user_data in fake_users_db.items():
+        if user_data["user_id"] == user_id:
+            return {
+                "id": user_data["user_id"],
+                "username": user_data["username"],
+                "email": user_data["email"]
+            }
+    
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="User not found"
+    )

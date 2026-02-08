@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
+import { useAuth } from '../context/AuthContext';
+import { UnauthorizedAccess } from '../components';
 
 interface EditorData {
     title: string;
@@ -16,6 +18,7 @@ interface UploadProgress {
 }
 
 const EditorLayout: React.FC = () => {
+    const { isAuthenticated, isLoading } = useAuth();
     const [editorData, setEditorData] = useState<EditorData>({
         title: '',
         markdown: '',
@@ -343,6 +346,28 @@ const EditorLayout: React.FC = () => {
         }, 0);
     };
 
+    // 로딩 중이면 로딩 표시
+    if (isLoading) {
+        return (
+            <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600 dark:text-gray-400">로딩 중...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // 인증되지 않은 경우
+    if (!isAuthenticated) {
+        return (
+            <UnauthorizedAccess 
+                redirectPath="/editor"
+            />
+        );
+    }
+
+    // 인증된 사용자의 에디터 화면
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
             <div className="max-w-[1920px] mx-auto">
@@ -495,6 +520,7 @@ const EditorLayout: React.FC = () => {
 
                     {/* 미리보기 */}
                     <div className={`flex-1 overflow-y-auto bg-white dark:bg-gray-800 ${!isPreviewMode ? 'hidden lg:block' : ''}`}>
+                        <span className="p-2 text-sm italic font-bold mb-4 mt-8 text-gray-700">미리보기</span>
                         <div className="p-6 max-w-4xl mx-auto">
                             <div className="markdown-content">
                                 <ReactMarkdown

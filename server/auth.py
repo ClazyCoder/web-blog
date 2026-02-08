@@ -128,14 +128,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # TODO: 실제로는 데이터베이스에서 사용자 정보를 조회
-    # user = await get_user_from_db(user_id)
-    # if user is None:
-    #     raise HTTPException(status_code=404, detail="User not found")
-    
+    # 페이로드에서 추가 정보 추출
     return {
         "user_id": user_id,
-        # 추가 사용자 정보...
+        "email": payload.get("email"),
+        "username": payload.get("username")
     }
 
 

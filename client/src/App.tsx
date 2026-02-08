@@ -12,6 +12,8 @@ const App: React.FC = () => {
                 <Route path="/board/:id" element={<CustomRoutes.PageRoute />} />
                 <Route path="/editor" element={<CustomRoutes.Editor />} />
                 <Route path="/editor/:id" element={<CustomRoutes.Editor />} />
+                <Route path="/login" element={<CustomRoutes.Login />} />
+                <Route path="/unauthorized" element={<CustomRoutes.Unauthorized />} />
 
                 {/* 404 페이지 */}
                 <Route path="*" element={<NotFound />} />

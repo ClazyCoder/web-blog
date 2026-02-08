@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 interface Post {
     id: string;
@@ -13,6 +14,7 @@ interface Post {
 
 const ListLayout: React.FC = () => {
     const navigate = useNavigate();
+    const { isAuthenticated } = useAuth();
     const [posts, setPosts] = useState<Post[]>(getMockPosts());
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTag, setSelectedTag] = useState<string>('all');
@@ -98,15 +100,17 @@ const ListLayout: React.FC = () => {
                         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
                             📝 게시판
                         </h1>
-                        <button
-                            onClick={handleWriteClick}
-                            className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors shadow-md"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            글쓰기
-                        </button>
+                        {isAuthenticated && (
+                            <button
+                                onClick={handleWriteClick}
+                                className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors shadow-md"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                글쓰기
+                            </button>
+                        )}
                     </div>
 
                     {/* 검색 및 필터 */}
