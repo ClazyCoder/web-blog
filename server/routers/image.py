@@ -1,14 +1,19 @@
 """
-이미지 업로드 라우터
+이미지 업로드 라우터 (개선 버전)
 """
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from pathlib import Path
 import uuid
 from datetime import datetime
 from typing import Optional
 import re
+from PIL import Image as PILImage
 from auth import get_current_user
+from db.session import get_db
+from models.image import Image
 
 router = APIRouter(
     prefix="/api/upload",
@@ -85,22 +90,28 @@ def generate_unique_filename(original_filename: str) -> str:
 @router.post("/image")
 async def upload_image(
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
-    이미지 업로드 엔드포인트 (인증 필요)
+    이미지 업로드 엔드포인트 (인증 필요, 개선 버전)
     
     Args:
         file: 업로드할 이미지 파일
         current_user: 현재 로그인한 사용자 (JWT 검증)
+        db: 비동기 데이터베이스 세션
         
     Returns:
         {
             "success": true,
+            "id": 1,
             "url": "http://localhost:8000/uploads/images/20240208_123456_abc123.jpg",
+            "storage_key": "images/20240208_123456_abc123.jpg",
             "filename": "20240208_123456_abc123.jpg",
             "original_filename": "my-image.jpg",
-            "size": 123456
+            "size": 123456,
+            "width": 1920,
+            "height": 1080
         }
     """
     
@@ -122,29 +133,60 @@ async def upload_image(
                 detail=f"File size exceeds maximum allowed size of {MAX_FILE_SIZE / (1024*1024)}MB"
             )
         
-        # 고유한 파일명 생성
+        # 고유한 파일명 생성 (storage_key)
         unique_filename = generate_unique_filename(file.filename or "image.jpg")
+        storage_key = f"images/{unique_filename}"  # 스토리지 키
         file_path = UPLOAD_DIR / unique_filename
         
         # 파일 저장
         with open(file_path, "wb") as buffer:
             buffer.write(content)
         
-        # URL 생성 (실제 환경에서는 CDN URL이나 실제 서버 URL 사용)
-        # TODO: 환경 변수로 BASE_URL 관리
-        file_url = f"http://localhost:8000/uploads/images/{unique_filename}"
+        # 이미지 크기 정보 추출
+        width, height = None, None
+        try:
+            with PILImage.open(file_path) as img:
+                width, height = img.size
+        except Exception:
+            pass  # 이미지 크기 추출 실패해도 업로드는 계속
+        
+        # DB에 이미지 정보 저장 (개선 버전)
+        new_image = Image(
+            storage_key=storage_key,  # 실제 저장 경로
+            original_filename=file.filename or "image.jpg",
+            file_size=file_size,
+            mime_type=file.content_type,
+            width=width,
+            height=height,
+            is_temporary=True,  # 게시글에 연결되지 않은 임시 이미지
+        )
+        
+        db.add(new_image)
+        await db.commit()
+        await db.refresh(new_image)
+        
+        # URL 동적 생성
+        base_url = "http://localhost:8000"  # TODO: 환경 변수로 관리
         
         return {
             "success": True,
-            "url": file_url,
-            "filename": unique_filename,
+            "id": new_image.id,
+            "url": new_image.get_url(base_url),  # 동적 생성
+            "storage_key": new_image.storage_key,
+            "filename": new_image.filename,  # property로 추출
             "original_filename": file.filename,
-            "size": file_size
+            "size": file_size,
+            "width": width,
+            "height": height
         }
         
     except HTTPException:
         raise
     except Exception as e:
+        await db.rollback()
+        # 에러 발생 시 파일 삭제
+        if file_path and file_path.exists():
+            file_path.unlink()
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to upload image: {str(e)}"
@@ -154,28 +196,33 @@ async def upload_image(
 
 
 @router.get("/temp/{filename}")
-async def get_temp_image_info(filename: str):
+async def get_temp_image_info(
+    filename: str,
+    db: AsyncSession = Depends(get_db)
+):
     """
-    임시 이미지 정보 조회
-    실제로는 이미지를 직접 serve하거나 CDN URL을 반환
+    임시 이미지 정보 조회 (파일명으로)
     """
-    file_path = UPLOAD_DIR / filename
+    # DB에서 이미지 정보 조회 (storage_key에서 파일명 매칭)
+    stmt = select(Image).filter(
+        Image.storage_key.like(f"%{filename}"),
+        Image.deleted_at.is_(None)
+    )
+    result = await db.execute(stmt)
+    image = result.scalar_one_or_none()
     
-    if not file_path.exists():
+    if not image:
         raise HTTPException(status_code=404, detail="Image not found")
     
-    return {
-        "filename": filename,
-        "exists": True,
-        "url": f"http://localhost:8000/uploads/images/{filename}",
-        "size": file_path.stat().st_size
-    }
+    base_url = "http://localhost:8000"  # TODO: 환경 변수
+    return image.to_dict(base_url)
 
 
 @router.delete("/image/{filename}")
 async def delete_image(
     filename: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     이미지 삭제 엔드포인트 (인증 필요)
@@ -183,19 +230,33 @@ async def delete_image(
     Args:
         filename: 삭제할 이미지 파일명
         current_user: 현재 로그인한 사용자 (JWT 검증)
+        db: 비동기 데이터베이스 세션
     """
-    file_path = UPLOAD_DIR / filename
+    # DB에서 이미지 정보 조회
+    stmt = select(Image).filter(Image.storage_key.like(f"%{filename}"))
+    result = await db.execute(stmt)
+    image = result.scalar_one_or_none()
     
-    if not file_path.exists():
+    if not image:
         raise HTTPException(status_code=404, detail="Image not found")
     
     try:
-        file_path.unlink()
+        # 실제 파일 삭제
+        # storage_key에서 실제 파일 경로 추출
+        file_path = UPLOAD_DIR / image.filename
+        if file_path.exists():
+            file_path.unlink()
+        
+        # DB에서 소프트 삭제 (개선: deleted_at 사용)
+        image.deleted_at = datetime.now()
+        await db.commit()
+        
         return {
             "success": True, 
             "message": f"Image {filename} deleted successfully"
         }
     except Exception as e:
+        await db.rollback()
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to delete image: {str(e)}"

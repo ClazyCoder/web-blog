@@ -3,9 +3,7 @@
 """
 
 from fastapi import APIRouter, HTTPException, status, Depends, Response
-from pydantic import BaseModel, field_validator
 from datetime import timedelta
-import re
 from auth import (
     create_access_token, 
     verify_admin_credentials,
@@ -13,35 +11,12 @@ from auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     get_current_user
 )
+from schemas.auth import UserLogin, UserInfo
 
 router = APIRouter(
     prefix="/api/auth",
     tags=["auth"]
 )
-
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
-    
-    @field_validator('username')
-    @classmethod
-    def validate_username(cls, v):
-        """XSS 방지: username 검증"""
-        if not v or not v.strip():
-            raise ValueError('Username cannot be empty')
-        
-        # 영문자, 숫자, 언더스코어, 하이픈만 허용 (3-20자)
-        if not re.match(r'^[a-zA-Z0-9_-]{3,20}$', v):
-            raise ValueError('Username must be 3-20 characters and contain only letters, numbers, underscore, or hyphen')
-        
-        return v.strip()
-
-
-class UserInfo(BaseModel):
-    id: str
-    username: str
-    email: str
 
 
 @router.post("/login")

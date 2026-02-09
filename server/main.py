@@ -3,6 +3,7 @@ Web Blog Server - Main Application
 FastAPI 기반 블로그 서버
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -10,7 +11,7 @@ from pathlib import Path
 import uvicorn
 
 # 라우터 임포트
-from routers import image, auth as auth_router
+from routers import image, auth as auth_router, post
 import auth
 
 # FastAPI 앱 초기화
@@ -19,15 +20,8 @@ app = FastAPI(
     description="블로그 시스템 API",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
 )
-
-# 앱 시작 시 관리자 사용자 초기화
-@app.on_event("startup")
-async def startup_event():
-    """앱 시작 시 관리자 비밀번호 해시 생성"""
-    auth.init_admin_user()
-    print("✅ Admin user initialized from environment variables")
 
 # CORS 설정
 app.add_middleware(
@@ -51,6 +45,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 # 라우터 등록
 app.include_router(auth_router.router)
 app.include_router(image.router)
+app.include_router(post.router)
 
 
 @app.get("/")
@@ -71,6 +66,14 @@ async def root():
                 "upload": "POST /api/upload/image",
                 "get_info": "GET /api/upload/temp/{filename}",
                 "delete": "DELETE /api/upload/image/{filename}"
+            },
+            "posts": {
+                "create": "POST /api/posts",
+                "list": "GET /api/posts",
+                "detail": "GET /api/posts/{post_id}",
+                "by_slug": "GET /api/posts/slug/{slug}",
+                "update": "PUT /api/posts/{post_id}",
+                "delete": "DELETE /api/posts/{post_id}"
             }
         }
     }
