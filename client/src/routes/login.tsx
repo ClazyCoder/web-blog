@@ -7,11 +7,11 @@ const Login: React.FC = () => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    
+
     const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    
+
     // 이전 페이지 경로를 가져옵니다 (없으면 홈으로)
     const from = (location.state as any)?.from?.pathname || '/';
 
@@ -25,17 +25,17 @@ const Login: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        
+
         if (!username.trim() || !password.trim()) {
             setError('사용자명과 비밀번호를 입력해주세요.');
             return;
         }
 
         setIsLoading(true);
-        
+
         try {
             const success = await login(username, password);
-            
+
             if (success) {
                 // 로그인 성공 시 이전 페이지로 이동
                 navigate(from, { replace: true });
@@ -43,11 +43,11 @@ const Login: React.FC = () => {
                 setError('로그인에 실패했습니다. 사용자명과 비밀번호를 확인해주세요.');
             }
         } catch (err: any) {
-            // 서버에서 반환한 에러 메시지 표시
-            if (err.response?.data?.detail) {
-                setError(err.response.data.detail);
-            } else if (err.response?.status === 401) {
+            // XSS 방지: 서버 에러 메시지를 직접 사용하지 않고 안전한 메시지 매핑
+            if (err.response?.status === 401) {
                 setError('사용자명 또는 비밀번호가 올바르지 않습니다.');
+            } else if (err.response?.status === 400) {
+                setError('잘못된 요청입니다. 입력 정보를 확인해주세요.');
             } else if (err.response?.status >= 500) {
                 setError('서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
             } else {
@@ -70,7 +70,7 @@ const Login: React.FC = () => {
                         YSG Blog에 오신 것을 환영합니다
                     </p>
                 </div>
-                
+
                 <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
                     <div className="rounded-md shadow-sm -space-y-px">
                         <div>
@@ -129,12 +129,6 @@ const Login: React.FC = () => {
                         >
                             {isLoading ? '로그인 중...' : '로그인'}
                         </button>
-                    </div>
-
-                    <div className="text-center space-y-2">
-                        <p className="text-sm text-gray-600">
-                            테스트 계정: <span className="font-mono font-semibold">root / root</span>
-                        </p>
                     </div>
                 </form>
             </div>

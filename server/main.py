@@ -10,7 +10,8 @@ from pathlib import Path
 import uvicorn
 
 # 라우터 임포트
-from routers import image, auth
+from routers import image, auth as auth_router
+import auth
 
 # FastAPI 앱 초기화
 app = FastAPI(
@@ -20,6 +21,13 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# 앱 시작 시 관리자 사용자 초기화
+@app.on_event("startup")
+async def startup_event():
+    """앱 시작 시 관리자 비밀번호 해시 생성"""
+    auth.init_admin_user()
+    print("✅ Admin user initialized from environment variables")
 
 # CORS 설정
 app.add_middleware(
@@ -41,7 +49,7 @@ uploads_dir.mkdir(exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # 라우터 등록
-app.include_router(auth.router)
+app.include_router(auth_router.router)
 app.include_router(image.router)
 
 

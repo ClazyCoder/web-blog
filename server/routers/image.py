@@ -7,6 +7,8 @@ from pathlib import Path
 import uuid
 from datetime import datetime
 from typing import Optional
+import re
+from auth import get_current_user
 
 router = APIRouter(
     prefix="/api/upload",
@@ -26,8 +28,15 @@ MAX_FILE_SIZE = 5 * 1024 * 1024
 
 def validate_image(file: UploadFile) -> bool:
     """이미지 파일 유효성 검사"""
+    if not file.filename:
+        return False
+    
+    # XSS 방지: 파일명에 위험한 문자 체크
+    if '..' in file.filename or '/' in file.filename or '\\' in file.filename:
+        return False
+    
     # 파일 확장자 체크
-    file_ext = Path(file.filename or "").suffix.lower()
+    file_ext = Path(file.filename).suffix.lower()
     if file_ext not in ALLOWED_EXTENSIONS:
         return False
     
@@ -38,9 +47,36 @@ def validate_image(file: UploadFile) -> bool:
     return True
 
 
+def sanitize_filename(filename: str) -> str:
+    """
+    XSS 방지: 파일명 sanitize
+    - 위험한 문자 제거
+    - 경로 탐색 공격 방지 (../, ..\\ 등)
+    """
+    # 파일명과 확장자 분리
+    name = Path(filename).stem
+    ext = Path(filename).suffix.lower()
+    
+    # 위험한 문자 제거 (영문자, 숫자, 언더스코어, 하이픈만 허용)
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    
+    # 빈 문자열 방지
+    if not safe_name:
+        safe_name = "file"
+    
+    # 최대 길이 제한 (50자)
+    safe_name = safe_name[:50]
+    
+    return f"{safe_name}{ext}"
+
+
 def generate_unique_filename(original_filename: str) -> str:
     """고유한 파일명 생성"""
-    file_ext = Path(original_filename).suffix.lower()
+    # 원본 파일명 sanitize
+    safe_filename = sanitize_filename(original_filename)
+    file_ext = Path(safe_filename).suffix.lower()
+    
+    # 타임스탬프와 UUID로 고유한 파일명 생성
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = str(uuid.uuid4())[:8]
     return f"{timestamp}_{unique_id}{file_ext}"
@@ -49,13 +85,14 @@ def generate_unique_filename(original_filename: str) -> str:
 @router.post("/image")
 async def upload_image(
     file: UploadFile = File(...),
-    # current_user: dict = Depends(get_current_user)  # JWT 인증이 필요한 경우
+    current_user: dict = Depends(get_current_user)
 ):
     """
-    이미지 업로드 엔드포인트
+    이미지 업로드 엔드포인트 (인증 필요)
     
     Args:
         file: 업로드할 이미지 파일
+        current_user: 현재 로그인한 사용자 (JWT 검증)
         
     Returns:
         {
@@ -138,10 +175,14 @@ async def get_temp_image_info(filename: str):
 @router.delete("/image/{filename}")
 async def delete_image(
     filename: str,
-    # current_user: dict = Depends(get_current_user)  # JWT 인증이 필요한 경우
+    current_user: dict = Depends(get_current_user)
 ):
     """
-    이미지 삭제 엔드포인트
+    이미지 삭제 엔드포인트 (인증 필요)
+    
+    Args:
+        filename: 삭제할 이미지 파일명
+        current_user: 현재 로그인한 사용자 (JWT 검증)
     """
     file_path = UPLOAD_DIR / filename
     

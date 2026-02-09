@@ -12,7 +12,7 @@ interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
     login: (username: string, password: string) => Promise<boolean>;
-    logout: () => void;
+    logout: () => Promise<void>;
     isLoading: boolean;
 }
 
@@ -22,23 +22,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // 컴포넌트 마운트 시 토큰으로 사용자 정보 확인
+    // 컴포넌트 마운트 시 쿠키의 토큰으로 사용자 정보 확인
     useEffect(() => {
         const initAuth = async () => {
-            const token = localStorage.getItem('token');
-            if (token) {
-                try {
-                    // 토큰으로 현재 사용자 정보 가져오기
-                    const response = await api.get('/api/auth/me');
-                    setUser(response.data);
-                } catch (error) {
-                    console.error('Failed to fetch user data:', error);
-                    // 토큰이 유효하지 않으면 제거
-                    localStorage.removeItem('token');
-                    localStorage.removeItem('user');
-                }
+            try {
+                // HttpOnly 쿠키의 토큰으로 현재 사용자 정보 가져오기
+                const response = await api.get('/api/auth/me');
+                setUser(response.data);
+            } catch (error) {
+                // 토큰이 없거나 유효하지 않으면 무시
+                console.log('Not authenticated');
+            } finally {
+                setIsLoading(false);
             }
-            setIsLoading(false);
         };
         
         initAuth();
@@ -46,24 +42,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const login = async (username: string, password: string): Promise<boolean> => {
         try {
-            // 서버에 로그인 요청
-            const response = await api.post('/api/auth/login', {
+            // 서버에 로그인 요청 (HttpOnly 쿠키에 토큰 저장됨)
+            await api.post('/api/auth/login', {
                 username,
                 password
             });
-            
-            const { access_token } = response.data;
-            
-            // 토큰 저장
-            localStorage.setItem('token', access_token);
-            
+
             // 사용자 정보 가져오기
             const userResponse = await api.get('/api/auth/me');
             const userData: User = userResponse.data;
-            
+
             setUser(userData);
-            localStorage.setItem('user', JSON.stringify(userData));
-            
+
             return true;
         } catch (error) {
             console.error('Login error:', error);
@@ -71,10 +61,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     };
 
-    const logout = () => {
-        setUser(null);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+    const logout = async () => {
+        try {
+            // 서버에 로그아웃 요청 (HttpOnly 쿠키 제거)
+            await api.post('/api/auth/logout');
+        } catch (error) {
+            console.error('Logout error:', error);
+        } finally {
+            setUser(null);
+        }
     };
 
     return (

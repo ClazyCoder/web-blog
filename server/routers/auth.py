@@ -2,13 +2,14 @@
 인증 관련 라우터
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, HTTPException, status, Depends, Response
+from pydantic import BaseModel, field_validator
 from datetime import timedelta
+import re
 from auth import (
     create_access_token, 
-    verify_password, 
-    get_password_hash,
+    verify_admin_credentials,
+    get_admin_user,
     ACCESS_TOKEN_EXPIRE_MINUTES,
     get_current_user
 )
@@ -22,12 +23,19 @@ router = APIRouter(
 class UserLogin(BaseModel):
     username: str
     password: str
-
-
-class UserRegister(BaseModel):
-    email: EmailStr
-    password: str
-    username: str
+    
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v):
+        """XSS 방지: username 검증"""
+        if not v or not v.strip():
+            raise ValueError('Username cannot be empty')
+        
+        # 영문자, 숫자, 언더스코어, 하이픈만 허용 (3-20자)
+        if not re.match(r'^[a-zA-Z0-9_-]{3,20}$', v):
+            raise ValueError('Username must be 3-20 characters and contain only letters, numbers, underscore, or hyphen')
+        
+        return v.strip()
 
 
 class UserInfo(BaseModel):
@@ -36,147 +44,89 @@ class UserInfo(BaseModel):
     email: str
 
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-
-# TODO: 실제로는 데이터베이스 사용
-# 임시 사용자 데이터 (개발용)
-fake_users_db = {}
-
-
-def _init_fake_db():
-    """임시 DB 초기화 (지연 초기화)"""
-    if not fake_users_db:
-        # root 계정 추가
-        fake_users_db["root"] = {
-            "email": "root@admin.com",
-            "username": "root",
-            "hashed_password": get_password_hash("root"),
-            "user_id": "admin"
-        }
-        # 테스트 계정
-        fake_users_db["testuser"] = {
-            "email": "user@example.com",
-            "username": "testuser",
-            "hashed_password": get_password_hash("password123"),
-            "user_id": "1"
-        }
-
-
-@router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserRegister):
+@router.post("/login")
+async def login(user_data: UserLogin, response: Response):
     """
-    사용자 회원가입
-    
-    Args:
-        user_data: 이메일, 비밀번호, 사용자명
-        
-    Returns:
-        JWT 액세스 토큰
-    """
-    _init_fake_db()  # DB 초기화
-    
-    # 이메일 중복 체크
-    if user_data.email in fake_users_db:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
-    
-    # TODO: 실제로는 데이터베이스에 저장
-    user_id = str(len(fake_users_db) + 1)
-    fake_users_db[user_data.email] = {
-        "email": user_data.email,
-        "username": user_data.username,
-        "hashed_password": get_password_hash(user_data.password),
-        "user_id": user_id
-    }
-    
-    # 토큰 생성
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user_id, "email": user_data.email},
-        expires_delta=access_token_expires
-    )
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
-
-
-@router.post("/login", response_model=Token)
-async def login(user_data: UserLogin):
-    """
-    사용자 로그인
+    사용자 로그인 (환경변수 기반 단일 사용자)
     
     Args:
         user_data: 사용자명, 비밀번호
+        response: FastAPI Response 객체 (쿠키 설정용)
         
     Returns:
-        JWT 액세스 토큰
+        성공 메시지
     """
-    _init_fake_db()  # DB 초기화
-    
-    # username으로 사용자 조회
-    user = fake_users_db.get(user_data.username)
-    
-    if not user:
+    # 환경변수의 관리자 자격증명 검증
+    if not verify_admin_credentials(user_data.username, user_data.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # 비밀번호 검증
-    if not verify_password(user_data.password, user["hashed_password"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    # 관리자 정보 가져오기
+    admin = get_admin_user()
     
-    # 토큰 생성
+    # JWT 토큰 생성
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
-            "sub": user["user_id"], 
-            "email": user["email"],
-            "username": user["username"]
+            "sub": admin["user_id"], 
+            "email": admin["email"],
+            "username": admin["username"]
         },
         expires_delta=access_token_expires
     )
     
+    # HttpOnly 쿠키에 토큰 설정
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,  # JavaScript에서 접근 불가 (XSS 방지)
+        secure=True,    # HTTPS에서만 전송 (CF Tunnel 사용)
+        samesite="lax", # CSRF 방지
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # 초 단위
+    )
+    
     return {
-        "access_token": access_token,
-        "token_type": "bearer"
+        "message": "Login successful",
+        "username": admin["username"]
     }
 
 
 @router.get("/me", response_model=UserInfo)
 async def get_me(current_user: dict = Depends(get_current_user)):
     """
-    현재 로그인한 사용자 정보 조회
+    현재 로그인한 사용자 정보 조회 (HttpOnly 쿠키 기반)
     
     Returns:
         사용자 정보
     """
-    _init_fake_db()
+    return {
+        "id": current_user.get("user_id"),
+        "username": current_user.get("username"),
+        "email": current_user.get("email")
+    }
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """
+    로그아웃 - HttpOnly 쿠키 제거
     
-    user_id = current_user.get("user_id")
-    
-    # fake_users_db에서 사용자 찾기
-    for username, user_data in fake_users_db.items():
-        if user_data["user_id"] == user_id:
-            return {
-                "id": user_data["user_id"],
-                "username": user_data["username"],
-                "email": user_data["email"]
-            }
-    
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="User not found"
+    Args:
+        response: FastAPI Response 객체
+        
+    Returns:
+        성공 메시지
+    """
+    # 쿠키 삭제 (max_age=0으로 설정)
+    response.set_cookie(
+        key="access_token",
+        value="",
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=0,  # 즉시 만료
     )
+    
+    return {"message": "Logout successful"}

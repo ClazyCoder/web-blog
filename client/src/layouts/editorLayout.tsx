@@ -731,16 +731,25 @@ const EditorLayout: React.FC = () => {
                                                 {children}
                                             </p>
                                         ),
-                                        a: ({ href, children }) => (
-                                            <a
-                                                href={href}
-                                                className="text-blue-600 dark:text-blue-400 hover:underline no-underline"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                            >
-                                                {children}
-                                            </a>
-                                        ),
+                                        a: ({ href, children }) => {
+                                            // XSS 방지: javascript:, data:, vbscript: 등 위험한 스키마 차단
+                                            const isSafeUrl = href && 
+                                                !href.toLowerCase().startsWith('javascript:') &&
+                                                !href.toLowerCase().startsWith('data:') &&
+                                                !href.toLowerCase().startsWith('vbscript:');
+                                            
+                                            return (
+                                                <a
+                                                    href={isSafeUrl ? href : '#'}
+                                                    className="text-blue-600 dark:text-blue-400 hover:underline no-underline"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    onClick={!isSafeUrl ? (e) => e.preventDefault() : undefined}
+                                                >
+                                                    {children}
+                                                </a>
+                                            );
+                                        },
                                         strong: ({ children }) => (
                                             <strong className="font-semibold text-gray-900 dark:text-gray-100">
                                                 {children}
@@ -799,13 +808,21 @@ const EditorLayout: React.FC = () => {
                                         hr: () => (
                                             <hr className="my-8 border-gray-300 dark:border-gray-700" />
                                         ),
-                                        img: ({ src, alt }) => (
-                                            <img
-                                                src={src}
-                                                alt={alt}
-                                                className="rounded-lg shadow-lg my-4 max-w-full h-auto"
-                                            />
-                                        ),
+                                        img: ({ src, alt }) => {
+                                            // XSS 방지: 안전한 이미지 URL만 허용
+                                            const isSafeUrl = src && 
+                                                (src.startsWith('http://') || 
+                                                 src.startsWith('https://') || 
+                                                 src.startsWith('/'));
+                                            
+                                            return isSafeUrl ? (
+                                                <img
+                                                    src={src}
+                                                    alt={alt || '이미지'}
+                                                    className="rounded-lg shadow-lg my-4 max-w-full h-auto"
+                                                />
+                                            ) : null;
+                                        },
                                     }}
                                     >
                                         {editorData.markdown || '*여기에 미리보기가 표시됩니다*'}

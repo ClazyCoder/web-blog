@@ -26,12 +26,24 @@ const ContentCard: React.FC<ContentCardProps> = ({
         }
     };
 
+    // XSS 방지: 안전한 이미지 URL만 허용
+    const isSafeImageUrl = imgSrc && 
+        (imgSrc.startsWith('http://') || 
+         imgSrc.startsWith('https://') || 
+         imgSrc.startsWith('/'));
+    
+    const safeImgSrc = isSafeImageUrl ? imgSrc : '/placeholder.png';
+
     return (
         <div className="relative rounded-lg overflow-hidden shadow-lg hover:shadow-2xl transition-shadow duration-300 cursor-pointer group">
             <img
-                src={imgSrc}
+                src={safeImgSrc}
                 alt={title}
                 className="w-full h-[200px] object-cover group-hover:scale-105 transition-transform duration-300"
+                onError={(e) => {
+                    // 이미지 로드 실패 시 플레이스홀더 표시
+                    (e.target as HTMLImageElement).src = '/placeholder.png';
+                }}
             />
 
             <div className="absolute inset-0 bg-black/40 group-hover:bg-black/50 transition-colors duration-300 p-4 flex flex-col justify-between">
