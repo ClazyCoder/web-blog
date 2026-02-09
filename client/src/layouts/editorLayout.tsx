@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
 import { useAuth } from '../context/AuthContext';
-import { UnauthorizedAccess } from '../components';
+import { UnauthorizedAccess, EditorSidebar } from '../components';
 
 interface EditorData {
     title: string;
@@ -15,6 +15,12 @@ interface EditorData {
 interface UploadProgress {
     fileName: string;
     progress: number;
+}
+
+interface UploadedImage {
+    url: string;
+    filename: string;
+    uploadedAt: number;
 }
 
 const EditorLayout: React.FC = () => {
@@ -29,33 +35,41 @@ const EditorLayout: React.FC = () => {
     const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [tagInput, setTagInput] = useState('');
+    const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // 자동 저장 (로컬 스토리지)
+    // 페이지 이탈 시 경고
     useEffect(() => {
-        const savedData = localStorage.getItem('markdown-draft');
-        if (savedData) {
-            try {
-                const parsed = JSON.parse(savedData);
-                // tags가 없는 이전 데이터와 호환성 유지
-                setEditorData({
-                    title: parsed.title || '',
-                    markdown: parsed.markdown || '',
-                    tags: parsed.tags || []
-                });
-            } catch (e) {
-                console.error('Failed to load draft:', e);
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            // 제목이나 본문이 있을 경우에만 경고 표시
+            if (editorData.title.trim() || editorData.markdown.trim()) {
+                e.preventDefault();
+                e.returnValue = ''; // Chrome에서 필요
             }
-        }
-    }, []);
+        };
 
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [editorData.title, editorData.markdown]);
+
+    // 드래그가 완전히 끝났을 때 처리
     useEffect(() => {
-        const timer = setTimeout(() => {
-            localStorage.setItem('markdown-draft', JSON.stringify(editorData));
-        }, 1000);
+        const handleDragEnd = () => {
+            setIsDragging(false);
+        };
 
-        return () => clearTimeout(timer);
-    }, [editorData]);
+        window.addEventListener('dragend', handleDragEnd);
+        window.addEventListener('drop', handleDragEnd);
+
+        return () => {
+            window.removeEventListener('dragend', handleDragEnd);
+            window.removeEventListener('drop', handleDragEnd);
+        };
+    }, []);
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -69,7 +83,7 @@ const EditorLayout: React.FC = () => {
     const handleClear = () => {
         if (confirm('작성 중인 내용을 모두 지우시겠습니까?')) {
             setEditorData({ title: '', markdown: '', tags: [] });
-            localStorage.removeItem('markdown-draft');
+            setUploadedImages([]);
         }
     };
 
@@ -134,6 +148,14 @@ const EditorLayout: React.FC = () => {
             // 잠시 후 진행률 제거
             setTimeout(() => setUploadProgress(null), 500);
 
+            // 업로드된 이미지 리스트에 추가
+            const uploadedImage: UploadedImage = {
+                url: data.url,
+                filename: data.filename || file.name,
+                uploadedAt: Date.now()
+            };
+            setUploadedImages(prev => [uploadedImage, ...prev]);
+
             // 서버 응답: { success: true, url: "http://...", filename: "..." }
             return data.url;
 
@@ -171,6 +193,18 @@ const EditorLayout: React.FC = () => {
             const newPosition = start + imageMarkdown.length;
             textarea.setSelectionRange(newPosition, newPosition);
         }, 0);
+    };
+
+    // 사이드바에서 이미지 선택 시
+    const handleImageSelect = (url: string, filename: string) => {
+        insertImageToMarkdown(url, filename);
+        setIsSidebarOpen(false);
+    };
+
+    // 사이드바에서 이미지 삭제 시
+    const handleImageDelete = (url: string) => {
+        // 클라이언트에서만 리스트에서 제거 (서버에는 Orphan 상태로 유지)
+        setUploadedImages(prev => prev.filter(img => img.url !== url));
     };
 
     // 파일 선택 핸들러
@@ -215,7 +249,14 @@ const EditorLayout: React.FC = () => {
     const handleDragLeave = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        setIsDragging(false);
+        // relatedTarget이 컨테이너 밖으로 나갔는지 확인
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const x = e.clientX;
+        const y = e.clientY;
+        
+        if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
+            setIsDragging(false);
+        }
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -499,7 +540,7 @@ const EditorLayout: React.FC = () => {
                         onDrop={handleDrop}
                     >
                         {isDragging && (
-                            <div className="absolute inset-0 bg-blue-500/10 border-4 border-dashed border-blue-500 dark:border-blue-400 z-10 flex items-center justify-center">
+                            <div className="absolute inset-0 bg-blue-500/10 border-4 border-dashed border-blue-500 dark:border-blue-400 z-10 flex items-center justify-center pointer-events-none">
                                 <div className="bg-white dark:bg-gray-800 px-6 py-4 rounded-lg shadow-lg">
                                     <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
                                         📷 이미지를 여기에 드롭하세요
@@ -670,6 +711,31 @@ const EditorLayout: React.FC = () => {
                         </div>
                     )}
                 </div>
+
+                {/* 플로팅 버튼 - 업로드된 이미지 보기 */}
+                <button
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center z-30"
+                    title="업로드된 이미지 보기"
+                >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    {uploadedImages.length > 0 && (
+                        <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                            {uploadedImages.length}
+                        </span>
+                    )}
+                </button>
+
+                {/* 에디터 사이드바 */}
+                <EditorSidebar
+                    isOpen={isSidebarOpen}
+                    onClose={() => setIsSidebarOpen(false)}
+                    uploadedImages={uploadedImages}
+                    onImageSelect={handleImageSelect}
+                    onImageDelete={handleImageDelete}
+                />
             </div>
 
             <style>{`
