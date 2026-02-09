@@ -37,6 +37,9 @@ const EditorLayout: React.FC = () => {
     const [tagInput, setTagInput] = useState('');
     const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [showPreview, setShowPreview] = useState(true);
+    const [editorWidth, setEditorWidth] = useState(50); // 에디터 너비 (%)
+    const [isResizing, setIsResizing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // 페이지 이탈 시 경고
@@ -70,6 +73,45 @@ const EditorLayout: React.FC = () => {
             window.removeEventListener('drop', handleDragEnd);
         };
     }, []);
+
+    // 리사이즈 핸들러
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isResizing) return;
+
+            const container = document.getElementById('editor-container');
+            if (!container) return;
+
+            const containerRect = container.getBoundingClientRect();
+            const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+
+            // 최소/최대 너비 제한 (20% ~ 80%)
+            if (newWidth >= 20 && newWidth <= 80) {
+                setEditorWidth(newWidth);
+            }
+        };
+
+        const handleMouseUp = () => {
+            setIsResizing(false);
+        };
+
+        if (isResizing) {
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        } else {
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+    }, [isResizing]);
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -180,12 +222,15 @@ const EditorLayout: React.FC = () => {
         const start = textarea.selectionStart;
         const imageMarkdown = `![${altText}](${imageUrl})\n`;
 
-        const newMarkdown =
-            editorData.markdown.substring(0, start) +
-            imageMarkdown +
-            editorData.markdown.substring(start);
-
-        setEditorData({ ...editorData, markdown: newMarkdown });
+        // 함수형 업데이트를 사용하여 최신 상태를 참조
+        setEditorData(prevData => {
+            const newMarkdown =
+                prevData.markdown.substring(0, start) +
+                imageMarkdown +
+                prevData.markdown.substring(start);
+            
+            return { ...prevData, markdown: newMarkdown };
+        });
 
         // 커서 위치 조정
         setTimeout(() => {
@@ -277,6 +322,13 @@ const EditorLayout: React.FC = () => {
             return;
         }
 
+        // 커서 위치 미리 저장
+        const textarea = document.getElementById('markdown-editor') as HTMLTextAreaElement;
+        const cursorPosition = textarea?.selectionStart || 0;
+
+        // 업로드할 이미지들을 순차적으로 처리
+        const uploadedImageMarkdowns: string[] = [];
+        
         for (const file of imageFiles) {
             if (file.size > 5 * 1024 * 1024) {
                 alert(`${file.name}의 크기가 5MB를 초과합니다.`);
@@ -285,10 +337,33 @@ const EditorLayout: React.FC = () => {
 
             try {
                 const imageUrl = await uploadImage(file);
-                insertImageToMarkdown(imageUrl, file.name);
+                uploadedImageMarkdowns.push(`![${file.name}](${imageUrl})`);
             } catch (error) {
                 console.error('Failed to upload image:', error);
             }
+        }
+
+        // 모든 이미지를 한 번에 삽입
+        if (uploadedImageMarkdowns.length > 0) {
+            const allImagesMarkdown = uploadedImageMarkdowns.join('\n') + '\n';
+            
+            setEditorData(prevData => {
+                const newMarkdown =
+                    prevData.markdown.substring(0, cursorPosition) +
+                    allImagesMarkdown +
+                    prevData.markdown.substring(cursorPosition);
+                
+                return { ...prevData, markdown: newMarkdown };
+            });
+
+            // 커서 위치 조정
+            setTimeout(() => {
+                if (textarea) {
+                    textarea.focus();
+                    const newPosition = cursorPosition + allImagesMarkdown.length;
+                    textarea.setSelectionRange(newPosition, newPosition);
+                }
+            }, 0);
         }
     };
 
@@ -301,16 +376,46 @@ const EditorLayout: React.FC = () => {
 
         e.preventDefault();
 
+        // 커서 위치 미리 저장
+        const textarea = document.getElementById('markdown-editor') as HTMLTextAreaElement;
+        const cursorPosition = textarea?.selectionStart || 0;
+
+        // 업로드할 이미지들을 순차적으로 처리
+        const uploadedImageMarkdowns: string[] = [];
+        
         for (const item of imageItems) {
             const file = item.getAsFile();
             if (!file) continue;
 
             try {
                 const imageUrl = await uploadImage(file);
-                insertImageToMarkdown(imageUrl, `pasted-image-${Date.now()}`);
+                uploadedImageMarkdowns.push(`![pasted-image-${Date.now()}](${imageUrl})`);
             } catch (error) {
                 console.error('Failed to paste image:', error);
             }
+        }
+
+        // 모든 이미지를 한 번에 삽입
+        if (uploadedImageMarkdowns.length > 0) {
+            const allImagesMarkdown = uploadedImageMarkdowns.join('\n') + '\n';
+            
+            setEditorData(prevData => {
+                const newMarkdown =
+                    prevData.markdown.substring(0, cursorPosition) +
+                    allImagesMarkdown +
+                    prevData.markdown.substring(cursorPosition);
+                
+                return { ...prevData, markdown: newMarkdown };
+            });
+
+            // 커서 위치 조정
+            setTimeout(() => {
+                if (textarea) {
+                    textarea.focus();
+                    const newPosition = cursorPosition + allImagesMarkdown.length;
+                    textarea.setSelectionRange(newPosition, newPosition);
+                }
+            }, 0);
         }
     };
 
@@ -423,11 +528,27 @@ const EditorLayout: React.FC = () => {
                             className="flex-1 text-2xl font-bold bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400"
                         />
                         <div className="flex items-center gap-2 ml-4">
+                            {/* 모바일 전용 편집/미리보기 토글 */}
                             <button
                                 onClick={() => setIsPreviewMode(!isPreviewMode)}
                                 className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors lg:hidden"
                             >
                                 {isPreviewMode ? '편집' : '미리보기'}
+                            </button>
+                            {/* 데스크탑 전용 미리보기 토글 */}
+                            <button
+                                onClick={() => setShowPreview(!showPreview)}
+                                className="hidden lg:flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                title={showPreview ? '미리보기 숨기기' : '미리보기 보기'}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    {showPreview ? (
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                    ) : (
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    )}
+                                </svg>
+                                {showPreview ? '미리보기 숨기기' : '미리보기 보기'}
                             </button>
                             <button
                                 onClick={handleClear}
@@ -530,10 +651,14 @@ const EditorLayout: React.FC = () => {
                 )}
 
                 {/* 에디터 영역 */}
-                <div className="flex flex-col lg:flex-row h-[calc(100vh-180px)]">
+                <div id="editor-container" className="flex flex-col lg:flex-row h-[calc(100vh-180px)]">
                     {/* 편집기 */}
                     <div
-                        className={`flex-1 relative ${isPreviewMode ? 'hidden lg:block' : ''}`}
+                        className={`relative ${isPreviewMode ? 'hidden lg:block' : ''}`}
+                        style={{ 
+                            width: showPreview ? `${editorWidth}%` : '100%',
+                            display: window.innerWidth < 1024 ? (isPreviewMode ? 'none' : 'block') : 'block'
+                        }}
                         onDragEnter={handleDragEnter}
                         onDragLeave={handleDragLeave}
                         onDragOver={handleDragOver}
@@ -554,20 +679,38 @@ const EditorLayout: React.FC = () => {
                             onChange={(e) => setEditorData({ ...editorData, markdown: e.target.value })}
                             onPaste={handlePaste}
                             placeholder="마크다운으로 작성하세요...&#10;&#10;💡 팁:&#10;  • 이미지를 드래그 앤 드롭하거나&#10;  • Ctrl+V로 클립보드 이미지를 붙여넣거나&#10;  • 툴바의 업로드 버튼을 사용하세요"
-                            className="w-full h-full p-6 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none outline-none border-r border-gray-200 dark:border-gray-700 font-mono text-sm leading-relaxed"
+                            className="w-full h-full p-6 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none outline-none font-mono text-sm leading-relaxed"
                             spellCheck={false}
                         />
                     </div>
 
+                    {/* 드래그 가능한 경계선 (데스크탑 전용) */}
+                    {showPreview && (
+                        <div
+                            className="hidden lg:block w-1 bg-gray-300 dark:bg-gray-600 hover:bg-blue-500 dark:hover:bg-blue-500 cursor-col-resize transition-colors relative group"
+                            onMouseDown={() => setIsResizing(true)}
+                        >
+                            <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-blue-500/20"></div>
+                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1 h-12 bg-gray-400 dark:bg-gray-500 rounded-full group-hover:bg-blue-500 transition-colors"></div>
+                        </div>
+                    )}
+
                     {/* 미리보기 */}
-                    <div className={`flex-1 overflow-y-auto bg-white dark:bg-gray-800 ${!isPreviewMode ? 'hidden lg:block' : ''}`}>
-                        <span className="p-2 text-sm italic font-bold mb-4 mt-8 text-gray-700">미리보기</span>
-                        <div className="p-6 max-w-4xl mx-auto">
-                            <div className="markdown-content">
-                                <ReactMarkdown
-                                    remarkPlugins={[remarkGfm]}
-                                    rehypePlugins={[rehypeHighlight]}
-                                    components={{
+                    {showPreview && (
+                        <div 
+                            className={`overflow-y-auto bg-white dark:bg-gray-800 ${!isPreviewMode ? 'hidden lg:block' : ''}`}
+                            style={{ 
+                                width: `${100 - editorWidth}%`,
+                                display: window.innerWidth < 1024 ? (isPreviewMode ? 'block' : 'none') : 'block'
+                            }}
+                        >
+                            <span className="p-2 text-sm italic font-bold mb-4 mt-8 text-gray-700 dark:text-gray-300">미리보기</span>
+                            <div className="p-6 max-w-4xl mx-auto">
+                                <div className="markdown-content">
+                                    <ReactMarkdown
+                                        remarkPlugins={[remarkGfm]}
+                                        rehypePlugins={[rehypeHighlight]}
+                                        components={{
                                         h1: ({ children }) => (
                                             <h1 className="text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100">
                                                 {children}
@@ -664,12 +807,13 @@ const EditorLayout: React.FC = () => {
                                             />
                                         ),
                                     }}
-                                >
-                                    {editorData.markdown || '*여기에 미리보기가 표시됩니다*'}
-                                </ReactMarkdown>
+                                    >
+                                        {editorData.markdown || '*여기에 미리보기가 표시됩니다*'}
+                                    </ReactMarkdown>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
                 </div>
                 {/* 태그 영역 */}
                 <div className="flex flex-col gap-2 p-2">
