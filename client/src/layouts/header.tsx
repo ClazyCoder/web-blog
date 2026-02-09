@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { confirmNavigation } from '../utils/navigationGuard';
 
 const Header: React.FC = () => {
     const { user, isAuthenticated, logout } = useAuth();
     const [showUserMenu, setShowUserMenu] = useState(false);
     const navigate = useNavigate();
 
+    // 네비게이션 가드를 적용하는 링크 클릭 핸들러
+    const handleNavClick = (e: React.MouseEvent) => {
+        if (!confirmNavigation()) {
+            e.preventDefault();
+        }
+    };
+
     const handleLogout = () => {
+        if (!confirmNavigation()) return;
         logout();
         setShowUserMenu(false);
         navigate('/');
@@ -17,19 +26,21 @@ const Header: React.FC = () => {
         <header className="bg-gray-800 shadow-md">
             <div className="container mx-auto px-4">
                 <nav className="flex items-center justify-between h-16">
-                    {/* 브랜드 - Link 사용 */}
-                    <Link
+                    {/* 브랜드 */}
+                    <NavLink
                         to="/"
+                        onClick={handleNavClick}
                         className="text-white text-xl font-bold hover:text-gray-300 transition-colors"
                     >
                         YSG Blog
-                    </Link>
+                    </NavLink>
 
                     {/* NavLink로 active 상태 자동 처리 */}
                     <div className="flex items-center gap-6">
                         <NavLink
                             to="/"
                             end
+                            onClick={handleNavClick}
                             className={({ isActive }) =>
                                 `transition-colors duration-200 ${isActive
                                     ? 'text-white font-semibold'
@@ -41,6 +52,7 @@ const Header: React.FC = () => {
                         </NavLink>
                         <NavLink
                             to="/board"
+                            onClick={handleNavClick}
                             className={({ isActive }) =>
                                 `transition-colors duration-200 ${isActive
                                     ? 'text-white font-semibold'
@@ -52,6 +64,7 @@ const Header: React.FC = () => {
                         </NavLink>
                         <NavLink
                             to="/others"
+                            onClick={handleNavClick}
                             className={({ isActive }) =>
                                 `transition-colors duration-200 ${isActive
                                     ? 'text-white font-semibold'
@@ -105,6 +118,7 @@ const Header: React.FC = () => {
                             ) : (
                                 <NavLink
                                     to="/login"
+                                    onClick={handleNavClick}
                                     className={({ isActive }) =>
                                         `px-4 py-2 rounded transition-colors duration-200 ${isActive
                                             ? 'bg-blue-700 text-white'

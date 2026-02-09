@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import api from '../utils/api';
 
@@ -8,7 +8,7 @@ interface User {
     email: string;
 }
 
-interface AuthContextType {
+export interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
     login: (username: string, password: string) => Promise<boolean>;
@@ -16,7 +16,7 @@ interface AuthContextType {
     isLoading: boolean;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
@@ -87,10 +87,5 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     );
 };
 
-export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (context === undefined) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
-    return context;
-};
+// re-export: 기존 import 경로 호환
+export { useAuth } from './useAuth';

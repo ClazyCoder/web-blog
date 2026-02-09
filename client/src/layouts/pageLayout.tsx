@@ -1,86 +1,116 @@
 import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
+import { useAuth } from '../context/AuthContext';
+import api from '../utils/api';
 
-interface PageItem {
-    id: string;
+interface PostData {
+    id: number;
     title: string;
-    markdown: string;
-    last_updated: string;
-    imgSrc: string;
+    content: string;
+    slug: string;
+    excerpt: string | null;
+    tags: string[];
+    category_slug: string | null;
+    status: string;
+    is_published: boolean;
+    view_count: number;
+    created_at: string;
+    updated_at: string;
+    published_at: string | null;
 }
 
 const PageLayout: React.FC = () => {
-    const [pageData, setPageData] = useState<PageItem | null>(null);
+    const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
+    const { isAuthenticated } = useAuth();
+    const [pageData, setPageData] = useState<PostData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
-        // Mock 데이터 - 실제로는 API나 props로 받아올 수 있습니다
-        const getMockPageData = (): PageItem => {
-            return {
-                id: "1",
-                title: "샘플 페이지",
-                markdown: `# 제목
+        const fetchPost = async () => {
+            if (!id) {
+                setError('잘못된 접근입니다.');
+                setLoading(false);
+                return;
+            }
 
-이것은 **Markdown** 콘텐츠 예시입니다.
-
-## 코드 블록 예시
-
-\`\`\`javascript
-function hello() {
-    console.log("Hello, World!");
-}
-\`\`\`
-
-## 리스트 예시
-
-- 항목 1
-- 항목 2
-- 항목 3
-
-## 표 예시
-
-| 컬럼1 | 컬럼2 | 컬럼3 |
-|-------|-------|-------|
-| 데이터1 | 데이터2 | 데이터3 |
-| 데이터4 | 데이터5 | 데이터6 |
-
-## 인용문
-
-> 이것은 인용문입니다.
-
-## 링크와 이미지
-
-[링크 예시](https://example.com)
-
----
-
-더 많은 내용이 여기에 들어갑니다.`,
-                last_updated: "2024-02-08",
-                imgSrc: "logo192.png"
-            };
+            try {
+                setLoading(true);
+                const response = await api.get(`/api/posts/${id}`);
+                setPageData(response.data);
+            } catch (err: any) {
+                if (err.response?.status === 404) {
+                    setError('게시글을 찾을 수 없습니다.');
+                } else {
+                    setError('게시글을 불러오는데 실패했습니다.');
+                }
+            } finally {
+                setLoading(false);
+            }
         };
 
-        setTimeout(() => {
-            setPageData(getMockPageData());
-            setLoading(false);
-        }, 100);
-    }, []);
+        fetchPost();
+    }, [id]);
+
+    const handleEdit = () => {
+        if (pageData) {
+            navigate(`/editor/${pageData.id}`);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!pageData) return;
+
+        if (!confirm('정말로 이 게시글을 삭제하시겠습니까?')) return;
+
+        try {
+            setIsDeleting(true);
+            await api.delete(`/api/posts/${pageData.id}`);
+            navigate('/board');
+        } catch (err) {
+            console.error('삭제 실패:', err);
+            alert('게시글 삭제에 실패했습니다.');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    const formatDate = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('ko-KR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        });
+    };
 
     if (loading) {
         return (
-            <div className="flex justify-center items-center min-h-screen">
-                <div className="text-xl">로딩 중...</div>
+            <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600 dark:text-gray-400">로딩 중...</p>
+                </div>
             </div>
         );
     }
 
-    if (!pageData) {
+    if (error || !pageData) {
         return (
-            <div className="flex justify-center items-center min-h-screen">
-                <div className="text-xl">페이지를 찾을 수 없습니다.</div>
+            <div className="flex flex-col justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900">
+                <div className="text-xl text-gray-700 dark:text-gray-300 mb-4">{error || '페이지를 찾을 수 없습니다.'}</div>
+                <button
+                    onClick={() => navigate('/board')}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                    게시판으로 돌아가기
+                </button>
             </div>
         );
     }
@@ -93,9 +123,54 @@ function hello() {
                     <h1 className="text-4xl font-bold mb-4 text-gray-900 dark:text-white">
                         {pageData.title}
                     </h1>
-                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                        <span>마지막 수정: {pageData.last_updated}</span>
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                            <span>작성일: {formatDate(pageData.created_at)}</span>
+                            {pageData.updated_at !== pageData.created_at && (
+                                <span>수정일: {formatDate(pageData.updated_at)}</span>
+                            )}
+                            <span>조회 {pageData.view_count}</span>
+                        </div>
+
+                        {/* 수정/삭제 버튼 (인증된 사용자만) */}
+                        {isAuthenticated && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleEdit}
+                                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    수정
+                                </button>
+                                <button
+                                    onClick={handleDelete}
+                                    disabled={isDeleting}
+                                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-50 rounded-lg transition-colors"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    {isDeleting ? '삭제 중...' : '삭제'}
+                                </button>
+                            </div>
+                        )}
                     </div>
+
+                    {/* 태그 */}
+                    {pageData.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-4">
+                            {pageData.tags.map(tag => (
+                                <span
+                                    key={tag}
+                                    className="text-sm px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full"
+                                >
+                                    {tag}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </header>
 
                 {/* Markdown 콘텐츠 */}
@@ -104,7 +179,6 @@ function hello() {
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeHighlight]}
                         components={{
-                            // 커스텀 컴포넌트로 스타일 강화
                             h1: ({ children }) => (
                                 <h1 className="text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100">
                                     {children}
@@ -126,7 +200,6 @@ function hello() {
                                 </p>
                             ),
                             a: ({ href, children }) => {
-                                // XSS 방지: javascript:, data:, vbscript: 등 위험한 스키마 차단
                                 const isSafeUrl = href &&
                                     !href.toLowerCase().startsWith('javascript:') &&
                                     !href.toLowerCase().startsWith('data:') &&
@@ -211,8 +284,21 @@ function hello() {
                             ),
                         }}
                     >
-                        {pageData.markdown}
+                        {pageData.content}
                     </ReactMarkdown>
+                </div>
+
+                {/* 하단 네비게이션 */}
+                <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
+                    <button
+                        onClick={() => navigate('/board')}
+                        className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        게시판으로 돌아가기
+                    </button>
                 </div>
             </article>
         </div>

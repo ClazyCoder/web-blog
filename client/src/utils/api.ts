@@ -12,16 +12,22 @@ const api = axios.create({
     withCredentials: true, // HttpOnly 쿠키 전송을 위해 필수
 });
 
+// 401 리다이렉트를 건너뛸 경로 (인증 확인용 요청)
+const SKIP_AUTH_REDIRECT = ['/api/auth/me', '/api/auth/login', '/api/auth/logout'];
+
 // 응답 인터셉터: 401 에러 처리
 api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
-            // 토큰이 만료되었거나 유효하지 않은 경우
-            // 로그인 페이지로 리다이렉트 (현재 페이지 정보를 state로 전달)
-            const currentPath = window.location.pathname;
-            if (currentPath !== '/login') {
-                window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+            const requestUrl = error.config?.url || '';
+            const shouldSkip = SKIP_AUTH_REDIRECT.some(path => requestUrl.includes(path));
+
+            if (!shouldSkip) {
+                const currentPath = window.location.pathname;
+                if (currentPath !== '/login') {
+                    window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+                }
             }
         }
         return Promise.reject(error);

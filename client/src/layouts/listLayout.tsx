@@ -1,94 +1,133 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../utils/api';
 
 interface Post {
-    id: string;
+    id: number;
     title: string;
-    author: string;
-    content: string;
-    created_at: string;
-    views: number;
+    slug: string;
+    excerpt: string | null;
     tags: string[];
+    category_slug: string | null;
+    status: string;
+    is_published: boolean;
+    view_count: number;
+    created_at: string;
+    updated_at: string;
+    published_at: string | null;
 }
+
+const POSTS_PER_PAGE = 10;
 
 const ListLayout: React.FC = () => {
     const navigate = useNavigate();
     const { isAuthenticated } = useAuth();
-    const [posts, setPosts] = useState<Post[]>(getMockPosts());
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTag, setSelectedTag] = useState<string>('all');
+    const [allTags, setAllTags] = useState<string[]>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPosts, setTotalPosts] = useState(0);
 
-    // Mock 데이터
-    function getMockPosts(): Post[] {
-        return [
-            {
-                id: '1',
-                title: 'React 19의 새로운 기능 살펴보기',
-                author: '개발자',
-                content: 'React 19에서 추가된 새로운 기능들을 알아봅니다...',
-                created_at: '2024-02-08',
-                views: 245,
-                tags: ['React', 'Frontend']
-            },
-            {
-                id: '2',
-                title: 'TypeScript 5.0 업데이트 내용',
-                author: '개발자',
-                content: 'TypeScript 5.0의 주요 변경사항을 정리했습니다...',
-                created_at: '2024-02-07',
-                views: 189,
-                tags: ['TypeScript', 'JavaScript']
-            },
-            {
-                id: '3',
-                title: 'FastAPI로 REST API 구축하기',
-                author: '백엔드 개발자',
-                content: 'Python FastAPI를 사용한 백엔드 개발 가이드...',
-                created_at: '2024-02-06',
-                views: 312,
-                tags: ['Python', 'Backend', 'FastAPI']
-            },
-            {
-                id: '4',
-                title: 'Tailwind CSS 실전 활용법',
-                author: 'UI 개발자',
-                content: 'Tailwind CSS를 활용한 효율적인 스타일링 방법...',
-                created_at: '2024-02-05',
-                views: 428,
-                tags: ['CSS', 'Tailwind', 'Frontend']
-            },
-            {
-                id: '5',
-                title: 'JWT 인증 구현 완벽 가이드',
-                author: '보안 전문가',
-                content: 'JWT를 사용한 안전한 인증 시스템 구축 방법...',
-                created_at: '2024-02-04',
-                views: 567,
-                tags: ['Security', 'Authentication', 'Backend']
-            },
-        ];
-    }
+    const totalPages = Math.max(1, Math.ceil(totalPosts / POSTS_PER_PAGE));
 
-    // 모든 태그 추출
-    const allTags = Array.from(
-        new Set(posts.flatMap(post => post.tags))
-    );
+    const fetchPosts = useCallback(async (signal?: AbortSignal) => {
+        try {
+            setLoading(true);
+            const params: Record<string, string | number> = {
+                skip: (currentPage - 1) * POSTS_PER_PAGE,
+                limit: POSTS_PER_PAGE,
+                status: 'published',
+            };
 
-    // 필터링된 포스트
-    const filteredPosts = posts.filter(post => {
-        const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            post.content.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesTag = selectedTag === 'all' || post.tags.includes(selectedTag);
-        return matchesSearch && matchesTag;
-    });
+            if (searchTerm.trim()) {
+                params.search = searchTerm.trim();
+            }
+            if (selectedTag !== 'all') {
+                params.tag = selectedTag;
+            }
 
-    const handlePostClick = (postId: string) => {
+            const response = await api.get('/api/posts', { params, signal });
+            setPosts(response.data.items);
+            setTotalPosts(response.data.total);
+
+            // 응답에서 태그 수집 (별도 API 호출 없이)
+            setAllTags(prev => {
+                const tagSet = new Set(prev);
+                response.data.items.forEach((post: Post) => {
+                    post.tags.forEach((tag: string) => tagSet.add(tag));
+                });
+                const sorted = Array.from(tagSet).sort();
+                // 변경이 없으면 이전 배열 유지 (리렌더 방지)
+                return sorted.length === prev.length && sorted.every((t, i) => t === prev[i]) ? prev : sorted;
+            });
+        } catch (err: any) {
+            if (err?.name !== 'CanceledError') {
+                console.error('게시글 로드 실패:', err);
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [currentPage, searchTerm, selectedTag]);
+
+    // 페이지/필터 변경 시 데이터 로드
+    useEffect(() => {
+        const controller = new AbortController();
+        fetchPosts(controller.signal);
+        return () => controller.abort();
+    }, [fetchPosts]);
+
+    // 검색어 또는 태그 변경 시 1페이지로 리셋
+    const handleSearchChange = (value: string) => {
+        setSearchTerm(value);
+        setCurrentPage(1);
+    };
+
+    const handleTagChange = (value: string) => {
+        setSelectedTag(value);
+        setCurrentPage(1);
+    };
+
+    const handlePostClick = (postId: number) => {
         navigate(`/board/${postId}`);
     };
 
     const handleWriteClick = () => {
         navigate('/editor');
+    };
+
+    // 날짜 포맷
+    const formatDate = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        });
+    };
+
+    // 페이지네이션 번호 생성
+    const getPageNumbers = (): (number | '...')[] => {
+        const pages: (number | '...')[] = [];
+        const maxVisible = 5;
+
+        if (totalPages <= maxVisible + 2) {
+            for (let i = 1; i <= totalPages; i++) pages.push(i);
+        } else {
+            pages.push(1);
+            if (currentPage > 3) pages.push('...');
+
+            const start = Math.max(2, currentPage - 1);
+            const end = Math.min(totalPages - 1, currentPage + 1);
+
+            for (let i = start; i <= end; i++) pages.push(i);
+
+            if (currentPage < totalPages - 2) pages.push('...');
+            pages.push(totalPages);
+        }
+        return pages;
     };
 
     return (
@@ -98,7 +137,7 @@ const ListLayout: React.FC = () => {
                 <div className="mb-8">
                     <div className="flex items-center justify-between mb-6">
                         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                            📝 게시판
+                            게시판
                         </h1>
                         {isAuthenticated && (
                             <button
@@ -120,7 +159,7 @@ const ListLayout: React.FC = () => {
                             <input
                                 type="text"
                                 value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onChange={(e) => handleSearchChange(e.target.value)}
                                 placeholder="검색어를 입력하세요..."
                                 className="w-full px-4 py-2.5 pl-10 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
                             />
@@ -137,7 +176,7 @@ const ListLayout: React.FC = () => {
                         {/* 태그 필터 */}
                         <select
                             value={selectedTag}
-                            onChange={(e) => setSelectedTag(e.target.value)}
+                            onChange={(e) => handleTagChange(e.target.value)}
                             className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
                         >
                             <option value="all">모든 태그</option>
@@ -152,14 +191,22 @@ const ListLayout: React.FC = () => {
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
                     {/* 테이블 헤더 (데스크톱) */}
                     <div className="hidden md:grid md:grid-cols-12 gap-4 px-6 py-4 bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 font-semibold text-gray-700 dark:text-gray-300 text-sm">
-                        <div className="col-span-6">제목</div>
-                        <div className="col-span-2">작성자</div>
-                        <div className="col-span-2">작성일</div>
+                        <div className="col-span-7">제목</div>
+                        <div className="col-span-3">작성일</div>
                         <div className="col-span-2 text-center">조회수</div>
                     </div>
 
                     {/* 게시글 리스트 */}
-                    {filteredPosts.length === 0 ? (
+                    {loading ? (
+                        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {[...Array(5)].map((_, i) => (
+                                <div key={i} className="px-6 py-4 animate-pulse">
+                                    <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2" />
+                                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
+                                </div>
+                            ))}
+                        </div>
+                    ) : posts.length === 0 ? (
                         <div className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                             <svg className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -169,7 +216,7 @@ const ListLayout: React.FC = () => {
                         </div>
                     ) : (
                         <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {filteredPosts.map((post) => (
+                            {posts.map((post) => (
                                 <div
                                     key={post.id}
                                     onClick={() => handlePostClick(post.id)}
@@ -177,7 +224,7 @@ const ListLayout: React.FC = () => {
                                 >
                                     {/* 데스크톱 레이아웃 */}
                                     <div className="hidden md:grid md:grid-cols-12 gap-4 items-center">
-                                        <div className="col-span-6">
+                                        <div className="col-span-7">
                                             <h3 className="font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 line-clamp-1">
                                                 {post.title}
                                             </h3>
@@ -192,14 +239,11 @@ const ListLayout: React.FC = () => {
                                                 ))}
                                             </div>
                                         </div>
-                                        <div className="col-span-2 text-gray-600 dark:text-gray-400 text-sm">
-                                            {post.author}
-                                        </div>
-                                        <div className="col-span-2 text-gray-600 dark:text-gray-400 text-sm">
-                                            {post.created_at}
+                                        <div className="col-span-3 text-gray-600 dark:text-gray-400 text-sm">
+                                            {formatDate(post.created_at)}
                                         </div>
                                         <div className="col-span-2 text-center text-gray-600 dark:text-gray-400 text-sm">
-                                            👁️ {post.views}
+                                            {post.view_count}
                                         </div>
                                     </div>
 
@@ -219,9 +263,8 @@ const ListLayout: React.FC = () => {
                                             ))}
                                         </div>
                                         <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-                                            <span>{post.author}</span>
-                                            <span>{post.created_at}</span>
-                                            <span>👁️ {post.views}</span>
+                                            <span>{formatDate(post.created_at)}</span>
+                                            <span>조회 {post.view_count}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -230,9 +273,54 @@ const ListLayout: React.FC = () => {
                     )}
                 </div>
 
+                {/* 페이지네이션 */}
+                {!loading && totalPages > 1 && (
+                    <div className="mt-6 flex items-center justify-center gap-1">
+                        {/* 이전 버튼 */}
+                        <button
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            이전
+                        </button>
+
+                        {/* 페이지 번호 */}
+                        {getPageNumbers().map((page, idx) =>
+                            page === '...' ? (
+                                <span key={`ellipsis-${idx}`} className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                    ...
+                                </span>
+                            ) : (
+                                <button
+                                    key={page}
+                                    onClick={() => setCurrentPage(page)}
+                                    className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                        currentPage === page
+                                            ? 'bg-blue-600 text-white shadow-md'
+                                            : 'text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                    }`}
+                                >
+                                    {page}
+                                </button>
+                            )
+                        )}
+
+                        {/* 다음 버튼 */}
+                        <button
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            다음
+                        </button>
+                    </div>
+                )}
+
                 {/* 하단 정보 */}
-                <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
-                    총 {filteredPosts.length}개의 게시글
+                <div className="mt-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                    총 {totalPosts}개의 게시글
+                    {totalPages > 1 && ` (${currentPage} / ${totalPages} 페이지)`}
                 </div>
             </div>
         </div>

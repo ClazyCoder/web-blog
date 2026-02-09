@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
 import { useAuth } from '../context/AuthContext';
+import { setNavigationGuard, clearNavigationGuard } from '../utils/navigationGuard';
 import { UnauthorizedAccess, EditorSidebar } from '../components';
+import api from '../utils/api';
 
 interface EditorData {
     title: string;
@@ -24,7 +27,11 @@ interface UploadedImage {
 }
 
 const EditorLayout: React.FC = () => {
+    const { id: paramId } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const { isAuthenticated, isLoading } = useAuth();
+    const [postId, setPostId] = useState<number | null>(paramId ? Number(paramId) : null);
+    const [originalStatus, setOriginalStatus] = useState<string | null>(null); // 기존 글의 원래 상태
     const [editorData, setEditorData] = useState<EditorData>({
         title: '',
         markdown: '',
@@ -32,6 +39,8 @@ const EditorLayout: React.FC = () => {
     });
     const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isDraftSaving, setIsDraftSaving] = useState(false);
+    const [isLoadingPost, setIsLoadingPost] = useState(!!paramId);
     const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [tagInput, setTagInput] = useState('');
@@ -42,22 +51,99 @@ const EditorLayout: React.FC = () => {
     const [isResizing, setIsResizing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // 페이지 이탈 시 경고
+    // 임시저장 글 목록 (새 글 작성 모드일 때)
+    const [drafts, setDrafts] = useState<{ id: number; title: string; updated_at: string }[]>([]);
+    const [showDraftBanner, setShowDraftBanner] = useState(false);
+
+    // 변경사항 추적 (페이지 이탈 경고용)
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const initialDataRef = useRef<EditorData>({ title: '', markdown: '', tags: [] });
+
+    // 편집 모드: 기존 게시글 로드
     useEffect(() => {
-        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            // 제목이나 본문이 있을 경우에만 경고 표시
-            if (editorData.title.trim() || editorData.markdown.trim()) {
-                e.preventDefault();
-                e.returnValue = ''; // Chrome에서 필요
+        if (!paramId) {
+            // 새 글 작성 모드: 임시저장 글이 있는지 확인
+            const fetchDrafts = async () => {
+                try {
+                    const response = await api.get('/api/posts', {
+                        params: { status: 'draft', limit: 5 }
+                    });
+                    if (response.data.items.length > 0) {
+                        setDrafts(response.data.items.map((d: any) => ({
+                            id: d.id,
+                            title: d.title,
+                            updated_at: d.updated_at,
+                        })));
+                        setShowDraftBanner(true);
+                    }
+                } catch {
+                    // 무시 (비로그인 상태 등)
+                }
+            };
+            fetchDrafts();
+            return;
+        }
+
+        const fetchPost = async () => {
+            try {
+                setIsLoadingPost(true);
+                const response = await api.get(`/api/posts/${paramId}`);
+                const post = response.data;
+                const loadedData = {
+                    title: post.title,
+                    markdown: post.content,
+                    tags: post.tags || [],
+                };
+                setEditorData(loadedData);
+                initialDataRef.current = loadedData;
+                setHasUnsavedChanges(false);
+                setPostId(post.id);
+                setOriginalStatus(post.status);
+            } catch (err) {
+                console.error('게시글 로드 실패:', err);
+                alert('게시글을 불러오는데 실패했습니다.');
+                navigate('/board');
+            } finally {
+                setIsLoadingPost(false);
             }
         };
 
-        window.addEventListener('beforeunload', handleBeforeUnload);
+        fetchPost();
+    }, [paramId, navigate]);
 
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
+    // 변경사항 감지
+    useEffect(() => {
+        const initial = initialDataRef.current;
+        const changed = editorData.title !== initial.title
+            || editorData.markdown !== initial.markdown
+            || JSON.stringify(editorData.tags) !== JSON.stringify(initial.tags);
+        setHasUnsavedChanges(changed);
+    }, [editorData]);
+
+    // 브라우저 탭 닫기/새로고침 시 경고
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (hasUnsavedChanges) {
+                e.preventDefault();
+            }
         };
-    }, [editorData.title, editorData.markdown]);
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [hasUnsavedChanges]);
+
+    // SPA 내 네비게이션 가드 등록 (헤더 링크 등)
+    const hasUnsavedRef = useRef(false);
+    useEffect(() => {
+        hasUnsavedRef.current = hasUnsavedChanges;
+        setNavigationGuard(() => hasUnsavedRef.current);
+        return () => clearNavigationGuard();
+    }, [hasUnsavedChanges]);
+
+    // 임시저장 글 불러오기
+    const handleLoadDraft = (draftId: number) => {
+        setShowDraftBanner(false);
+        navigate(`/editor/${draftId}`, { replace: true });
+    };
 
     // 드래그가 완전히 끝났을 때 처리
     useEffect(() => {
@@ -113,14 +199,77 @@ const EditorLayout: React.FC = () => {
         };
     }, [isResizing]);
 
-    const handleSave = async () => {
-        setIsSaving(true);
-        // TODO: API 호출로 서버에 저장
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        console.log('Saved:', editorData);
-        alert('저장되었습니다!');
-        setIsSaving(false);
+    const isEditingPublished = !!postId && originalStatus === 'published';
+
+    const savePost = async (action: 'draft' | 'published' | 'save') => {
+        // action: 'draft' = 임시저장, 'published' = 발행, 'save' = 상태 유지 저장
+        const isDraft = action === 'draft';
+        const isSaveOnly = action === 'save';
+
+        // 발행 또는 상태 유지 저장 시 필수 필드 검증
+        if (!isDraft) {
+            if (!editorData.title.trim()) {
+                alert('제목을 입력해주세요.');
+                return;
+            }
+            if (!editorData.markdown.trim()) {
+                alert('본문을 입력해주세요.');
+                return;
+            }
+        }
+
+        if (isDraft) setIsDraftSaving(true);
+        else setIsSaving(true);
+
+        try {
+            // 상태 결정: 'save'이면 원래 상태 유지
+            const targetStatus = isSaveOnly ? (originalStatus || 'published') : action;
+
+            const payload = {
+                title: editorData.title.trim() || '제목 없음',
+                content: editorData.markdown || ' ',
+                tags: editorData.tags,
+                status: targetStatus,
+            };
+
+            let response;
+            if (postId) {
+                // 기존 게시글 수정 (PUT)
+                response = await api.put(`/api/posts/${postId}`, payload);
+            } else {
+                // 새 게시글 생성 (POST)
+                response = await api.post('/api/posts', payload);
+                const newId = response.data.id;
+                setPostId(newId);
+                // URL을 편집 모드로 변경 (뒤로가기 시 새 글 생성 방지)
+                setHasUnsavedChanges(false);
+                navigate(`/editor/${newId}`, { replace: true });
+            }
+
+            // 저장 성공: 초기 데이터 갱신 (이탈 경고 방지)
+            initialDataRef.current = { ...editorData };
+            setHasUnsavedChanges(false);
+
+            if (!isDraft && !isSaveOnly) {
+                // 발행 시에만 게시글 페이지로 이동
+                navigate(`/board/${response.data.id}`);
+            } else if (isSaveOnly) {
+                // 상태 유지 저장: 게시글 페이지로 이동
+                navigate(`/board/${response.data.id}`);
+            }
+        } catch (err: any) {
+            const message = err.response?.data?.detail || '저장에 실패했습니다.';
+            alert(message);
+        } finally {
+            setIsSaving(false);
+            setIsDraftSaving(false);
+        }
     };
+
+    // 발행된 글 수정 중: "저장" = 상태 유지, "발행" = 발행
+    // 새 글 / 임시 글 수정: "임시 저장" = draft, "발행" = published
+    const handleSave = () => isEditingPublished ? savePost('save') : savePost('published');
+    const handleDraftSave = () => savePost('draft');
 
     const handleClear = () => {
         if (confirm('작성 중인 내용을 모두 지우시겠습니까?')) {
@@ -165,24 +314,17 @@ const EditorLayout: React.FC = () => {
         try {
             setUploadProgress({ fileName: file.name, progress: 0 });
 
-            // 실제 API 호출
-            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-            const response = await fetch(`${API_BASE_URL}/api/upload/image`, {
-                method: 'POST',
-                body: formData,
-                // JWT 토큰이 있는 경우 포함 (선택사항)
-                // headers: {
-                //     'Authorization': `Bearer ${localStorage.getItem('token')}`
-                // }
+            const response = await api.post('/api/upload/image', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress: (progressEvent) => {
+                    if (progressEvent.total) {
+                        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        setUploadProgress({ fileName: file.name, progress: percent });
+                    }
+                },
             });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.detail || `Upload failed: ${response.statusText}`);
-            }
-
-            const data = await response.json();
+            const data = response.data;
 
             // 진행률 100% 표시
             setUploadProgress({ fileName: file.name, progress: 100 });
@@ -201,13 +343,12 @@ const EditorLayout: React.FC = () => {
             // 서버 응답: { success: true, url: "http://...", filename: "..." }
             return data.url;
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Image upload failed:', error);
             setUploadProgress(null);
 
-            const errorMessage = error instanceof Error
-                ? error.message
-                : '이미지 업로드에 실패했습니다.';
+            const errorMessage = error.response?.data?.detail
+                || (error instanceof Error ? error.message : '이미지 업로드에 실패했습니다.');
 
             alert(errorMessage);
             throw error;
@@ -492,7 +633,19 @@ const EditorLayout: React.FC = () => {
         }, 0);
     };
 
-    // 로딩 중이면 로딩 표시
+    // 게시글 로딩 중이면 로딩 표시
+    if (isLoadingPost) {
+        return (
+            <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600 dark:text-gray-400">게시글 불러오는 중...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // 인증 로딩 중이면 로딩 표시
     if (isLoading) {
         return (
             <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -513,10 +666,46 @@ const EditorLayout: React.FC = () => {
         );
     }
 
+    // 날짜 포맷 헬퍼
+    const formatDraftDate = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return date.toLocaleString('ko-KR', {
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+        });
+    };
+
     // 인증된 사용자의 에디터 화면
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
             <div className="max-w-[1920px] mx-auto">
+                {/* 임시저장 배너 */}
+                {showDraftBanner && drafts.length > 0 && (
+                    <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 px-4 py-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="text-sm text-amber-800 dark:text-amber-300 font-medium">
+                                임시저장된 글이 {drafts.length}개 있습니다.
+                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                {drafts.map(draft => (
+                                    <button
+                                        key={draft.id}
+                                        onClick={() => handleLoadDraft(draft.id)}
+                                        className="px-3 py-1.5 text-xs font-medium bg-amber-100 dark:bg-amber-800 text-amber-800 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-700 rounded-lg transition-colors"
+                                    >
+                                        {draft.title} ({formatDraftDate(draft.updated_at)})
+                                    </button>
+                                ))}
+                                <button
+                                    onClick={() => setShowDraftBanner(false)}
+                                    className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                >
+                                    새 글 작성
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* 헤더 */}
                 <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
                     <div className="flex items-center justify-between mb-3">
@@ -556,13 +745,34 @@ const EditorLayout: React.FC = () => {
                             >
                                 초기화
                             </button>
-                            <button
-                                onClick={handleSave}
-                                disabled={isSaving}
-                                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded transition-colors"
-                            >
-                                {isSaving ? '저장 중...' : '저장'}
-                            </button>
+                            {isEditingPublished ? (
+                                /* 발행된 글 수정 모드: "저장" 버튼만 표시 */
+                                <button
+                                    onClick={handleSave}
+                                    disabled={isSaving || isDraftSaving}
+                                    className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded transition-colors"
+                                >
+                                    {isSaving ? '저장 중...' : '저장'}
+                                </button>
+                            ) : (
+                                /* 새 글 / 임시 글 모드: "임시 저장" + "발행" */
+                                <>
+                                    <button
+                                        onClick={handleDraftSave}
+                                        disabled={isDraftSaving || isSaving}
+                                        className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 rounded transition-colors"
+                                    >
+                                        {isDraftSaving ? '저장 중...' : '임시 저장'}
+                                    </button>
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={isSaving || isDraftSaving}
+                                        className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded transition-colors"
+                                    >
+                                        {isSaving ? '발행 중...' : '발행'}
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
