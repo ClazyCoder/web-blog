@@ -32,7 +32,7 @@ const Header: React.FC = () => {
                         onClick={handleNavClick}
                         className="text-white text-xl font-bold hover:text-gray-300 transition-colors"
                     >
-                        YSG Blog
+                        {import.meta.env.VITE_SITE_NAME || 'YSG Blog'}
                     </NavLink>
 
                     {/* NavLink로 active 상태 자동 처리 */}

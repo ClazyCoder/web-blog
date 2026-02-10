@@ -1,36 +1,18 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
 
 const Footer: React.FC = () => {
+    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || 'admin@example.com';
+
     return (
         <footer className="bg-gray-800 py-4">
-            <nav className="flex justify-center items-center gap-6">
-                <NavLink
-                    to="/"
-                    className={({ isActive }) =>
-                        `transition-colors duration-200 ${isActive
-                            ? 'text-white font-semibold'
-                            : 'text-gray-300 hover:text-white'
-                        }`
-                    }
+            <div className="flex justify-center items-center">
+                <a
+                    href={`mailto:${adminEmail}`}
+                    className="text-gray-300 hover:text-white transition-colors duration-200"
                 >
-                    Home
-                </NavLink>
-                <NavLink
-                    to="/board"
-                    className={({ isActive }) =>
-                        `transition-colors duration-200 ${isActive
-                            ? 'text-white font-semibold'
-                            : 'text-gray-300 hover:text-white'
-                        }`
-                    }
-                >
-                    Board
-                </NavLink>
-                <span className="text-gray-500 cursor-not-allowed">
-                    Others
-                </span>
-            </nav>
+                    {adminEmail}
+                </a>
+            </div>
         </footer>
     );
 };

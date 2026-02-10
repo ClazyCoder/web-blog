@@ -67,7 +67,7 @@ const Login: React.FC = () => {
                         로그인
                     </h2>
                     <p className="mt-2 text-center text-sm text-gray-600">
-                        YSG Blog에 오신 것을 환영합니다
+                        {import.meta.env.VITE_SITE_NAME || 'YSG Blog'}에 오신 것을 환영합니다
                     </p>
                 </div>
 

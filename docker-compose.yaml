@@ -50,6 +50,9 @@ services:
     build:
       context: ./client
       dockerfile: Dockerfile
+      args:
+        VITE_SITE_NAME: ${SITE_NAME:-YSG Blog}
+        VITE_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
     restart: unless-stopped
     depends_on:
       - server
