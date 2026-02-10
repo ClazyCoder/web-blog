@@ -1,48 +1,165 @@
 # Web Blog
 
-모던한 블로그 플랫폼 - React + FastAPI
+모던 풀스택 블로그 플랫폼 — **React 19 + FastAPI**
+
+마크다운 기반 에디터, 실시간 미리보기, 이미지 업로드, JWT 인증 등을 지원하는 개인 블로그 시스템입니다.
+
+---
 
 ## 프로젝트 구조
 
 ```
 web-blog/
-├── client/              # React + TypeScript 프론트엔드
+├── client/                   # React + TypeScript 프론트엔드
 │   ├── src/
-│   │   ├── components/  # 재사용 가능한 컴포넌트
-│   │   ├── layouts/     # 레이아웃 컴포넌트
-│   │   ├── routes/      # 라우트 컴포넌트
-│   │   └── ...
-│   └── package.json
+│   │   ├── components/       # 재사용 컴포넌트 (ContentCard, EditorSidebar, ...)
+│   │   ├── context/          # AuthContext (인증 상태 관리)
+│   │   ├── layouts/          # 페이지 레이아웃 (Header, Footer, Editor, Board, ...)
+│   │   ├── routes/           # 라우트 컴포넌트
+│   │   └── utils/            # API 클라이언트, 네비게이션 가드
+│   ├── package.json
+│   └── vite.config.ts
 │
-├── server/              # FastAPI 백엔드
-│   ├── routers/         # API 라우터
-│   │   ├── auth.py      # 인증 API
-│   │   └── image.py     # 이미지 업로드 API
-│   ├── main.py          # FastAPI 앱
-│   ├── auth.py          # JWT 인증
+├── server/                   # FastAPI 비동기 백엔드
+│   ├── models/               # SQLAlchemy ORM 모델 (Post, Image)
+│   ├── routers/              # API 라우터 (auth, post, image)
+│   ├── schemas/              # Pydantic 스키마 (요청/응답 검증)
+│   ├── db/                   # 데이터베이스 세션 관리
+│   ├── blog/                 # Alembic 마이그레이션
+│   ├── main.py               # FastAPI 앱 진입점
+│   ├── auth.py               # JWT 인증 로직
 │   └── pyproject.toml
 │
+├── LICENSE                   # Apache License 2.0
 └── README.md
 ```
 
+---
+
 ## 주요 기능
 
-### 프론트엔드 (Client)
-- ✅ 마크다운 에디터 (실시간 미리보기)
-- ✅ 이미지 업로드 (드래그 앤 드롭, 클립보드)
-- ✅ 다크모드 지원
-- ✅ 반응형 디자인
-- ✅ GitHub Flavored Markdown
-- ✅ 코드 하이라이팅
-- 📝 블로그 포스트 목록/상세 (개발 중)
+### 블로그 포스트
 
-### 백엔드 (Server)
-- ✅ JWT 기반 인증 (로그인/회원가입)
-- ✅ 이미지 업로드 API
-- ✅ CORS 설정
-- ✅ 자동 API 문서 (Swagger/ReDoc)
-- 📝 블로그 포스트 CRUD (예정)
-- 📝 댓글 시스템 (예정)
+| 기능 | 설명 |
+|------|------|
+| 포스트 CRUD | 생성, 조회, 수정, 삭제 (소프트 삭제 지원) |
+| 마크다운 에디터 | 분할 화면 실시간 미리보기, 리사이징 가능 |
+| 에디터 툴바 | 제목, 볼드, 이탤릭, 코드, 링크, 이미지, 리스트, 인용, 코드 블록 |
+| GFM 지원 | GitHub Flavored Markdown (테이블, 체크리스트 등) |
+| 코드 하이라이팅 | Highlight.js 기반 구문 강조 |
+| 임시 저장/발행 | 초안(draft) 모드와 발행(published) 모드 분리 |
+| 태그 시스템 | 포스트당 최대 10개 태그, 태그 기반 필터링 |
+| 검색 | 제목/내용 전문 검색 (대소문자 무시) |
+| 페이지네이션 | 목록 페이지 10개 단위 페이지 처리 |
+| 조회수 추적 | 포스트 열람 시 자동 조회수 증가 |
+| 슬러그 URL | 제목 기반 고유 슬러그 자동 생성 |
+
+### 이미지 관리
+
+| 기능 | 설명 |
+|------|------|
+| 드래그 앤 드롭 | 에디터에 이미지 드래그 앤 드롭 업로드 |
+| 클립보드 붙여넣기 | Ctrl+V로 이미지 즉시 업로드 |
+| 파일 선택 | 파일 탐색기를 통한 업로드 |
+| 업로드 진행률 | 업로드 상태 실시간 표시 |
+| 이미지 사이드바 | 업로드된 이미지 관리 (삽입, 삭제) |
+| 자동 연결 | 포스트 저장 시 마크다운 내 이미지 자동 연결/해제 |
+| 썸네일 | 포스트 첫 번째 이미지를 썸네일로 자동 추출 |
+| 파일 검증 | 허용 확장자 (jpg, png, gif, webp), 최대 5MB |
+
+### 인증 시스템
+
+| 기능 | 설명 |
+|------|------|
+| JWT 인증 | HttpOnly 쿠키 기반 (Secure, SameSite=Lax) |
+| 관리자 계정 | 환경 변수 기반 단일 관리자 설정 |
+| 자동 인증 확인 | 앱 로드 시 `/api/auth/me`로 세션 복원 |
+| 401 인터셉터 | 인증 만료 시 로그인 페이지로 자동 리다이렉트 |
+| Bearer 토큰 | 레거시 Authorization 헤더 지원 |
+
+### UI/UX
+
+| 기능 | 설명 |
+|------|------|
+| 반응형 디자인 | 모바일/태블릿/데스크톱 대응 (Tailwind CSS) |
+| 다크 모드 | 시스템 테마 자동 감지 (`prefers-color-scheme`) |
+| 미저장 변경 감지 | 에디터에서 이탈 시 확인 다이얼로그 (beforeunload + SPA 가드) |
+| 로딩/에러 상태 | 모든 비동기 요청에 대한 상태 처리 |
+| XSS 방어 | 이미지/링크 URL 검증, HTML 태그 제거, 파일명 정제 |
+
+---
+
+## 기술 스택
+
+### 프론트엔드
+
+| 기술 | 버전 | 용도 |
+|------|------|------|
+| React | 19 | UI 프레임워크 |
+| TypeScript | 5.9 | 정적 타입 |
+| Vite | 7.2 | 빌드 도구 |
+| Tailwind CSS | 4.1 | 유틸리티 CSS |
+| React Router | 7.13 | 클라이언트 라우팅 |
+| Axios | 1.13 | HTTP 클라이언트 |
+| react-markdown | 10.1 | 마크다운 렌더링 |
+| remark-gfm | 4.0 | GitHub Flavored Markdown |
+| rehype-highlight | 7.0 | 코드 구문 강조 |
+
+### 백엔드
+
+| 기술 | 버전 | 용도 |
+|------|------|------|
+| FastAPI | 0.128+ | 비동기 웹 프레임워크 |
+| Python | 3.12+ | 런타임 |
+| SQLAlchemy | (async) | ORM / 비동기 DB 액세스 |
+| Alembic | 1.18+ | DB 마이그레이션 |
+| python-jose | 3.3+ | JWT 토큰 |
+| bcrypt | 4.0+ | 비밀번호 해싱 |
+| Pillow | 10.4+ | 이미지 처리 (크기 추출) |
+| asyncpg | 0.31+ | PostgreSQL 비동기 드라이버 |
+| aiosqlite | 0.20+ | SQLite 비동기 드라이버 |
+
+---
+
+## API 엔드포인트
+
+### 인증
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| `POST` | `/api/auth/login` | 로그인 (쿠키 발급) | - |
+| `GET` | `/api/auth/me` | 현재 사용자 정보 | 필요 |
+| `POST` | `/api/auth/logout` | 로그아웃 (쿠키 제거) | 필요 |
+
+### 포스트
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| `POST` | `/api/posts` | 포스트 생성 | 필요 |
+| `GET` | `/api/posts` | 포스트 목록 (페이지네이션, 필터) | - |
+| `GET` | `/api/posts/{id}` | 포스트 상세 (조회수 증가) | - |
+| `GET` | `/api/posts/slug/{slug}` | 슬러그로 포스트 조회 | - |
+| `PUT` | `/api/posts/{id}` | 포스트 수정 | 필요 |
+| `DELETE` | `/api/posts/{id}` | 포스트 삭제 (`?permanent=true` 영구 삭제) | 필요 |
+
+### 이미지 업로드
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| `POST` | `/api/upload/image` | 이미지 업로드 | 필요 |
+| `GET` | `/api/upload/temp/{filename}` | 임시 이미지 정보 | - |
+| `DELETE` | `/api/upload/image/{filename}` | 이미지 삭제 | 필요 |
+
+### 기타
+
+| Method | Path | 설명 |
+|--------|------|------|
+| `GET` | `/` | API 정보 및 엔드포인트 목록 |
+| `GET` | `/health` | 헬스 체크 |
+| `GET` | `/docs` | Swagger UI 문서 |
+| `GET` | `/redoc` | ReDoc 문서 |
+
+---
 
 ## 빠른 시작
 
@@ -50,7 +167,7 @@ web-blog/
 
 - **Node.js** >= 18.x
 - **Python** >= 3.12
-- **uv** (Python 패키지 관리자, 선택사항)
+- **uv** (Python 패키지 관리자, 권장) 또는 pip
 
 ### 1. 클라이언트 실행
 
@@ -67,7 +184,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-클라이언트: http://localhost:5173
+> 클라이언트: http://localhost:5173
 
 ### 2. 서버 실행
 
@@ -76,110 +193,145 @@ cd server
 
 # 의존성 설치
 uv sync
-# 또는
-pip install -e .
+# 또는: pip install -e .
 
 # 환경 변수 설정
 cp .env.example .env
-# SECRET_KEY 생성 및 .env 파일 수정
+# .env 파일에서 SECRET_KEY, ADMIN_USERNAME, ADMIN_PASSWORD 설정
+
+# DB 마이그레이션
+alembic upgrade head
 
 # 서버 실행
 python main.py
 ```
 
-서버: http://localhost:8000
+> 서버: http://localhost:8000
+>
+> API 문서: http://localhost:8000/docs
 
-API 문서: http://localhost:8000/docs
+---
+
+## 환경 변수
+
+### 클라이언트 (`client/.env.local`)
+
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+### 서버 (`server/.env`)
+
+```env
+# 인증
+SECRET_KEY=your-secret-key-here
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# 관리자 계정
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-admin-password
+ADMIN_EMAIL=admin@example.com
+
+# 데이터베이스 (미설정 시 SQLite 사용)
+DATABASE_URL=sqlite+aiosqlite:///./blog.db
+# PostgreSQL 예시: postgresql://user:pass@localhost/blogdb
+```
+
+---
 
 ## 개발 가이드
 
-### 클라이언트 개발
+### 클라이언트
 
 ```bash
 cd client
 
-# 개발 서버
-npm run dev
-
-# 빌드
-npm run build
-
-# 린트
-npm run lint
+npm run dev       # 개발 서버 (HMR)
+npm run build     # 프로덕션 빌드
+npm run preview   # 빌드 미리보기
+npm run lint      # ESLint 검사
 ```
 
-### 서버 개발
+### 서버
 
 ```bash
 cd server
 
-# 개발 서버 (자동 리로드)
-python main.py
+python main.py              # 개발 서버 (자동 리로드)
+uvicorn main:app --reload   # 또는 직접 uvicorn 실행
 
-# 또는
-uvicorn main:app --reload
+# DB 마이그레이션
+alembic revision --autogenerate -m "설명"   # 마이그레이션 생성
+alembic upgrade head                        # 마이그레이션 적용
 
 # 테스트
 pytest
 ```
 
-## API 문서
+---
 
-서버 실행 후:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+## 데이터베이스
 
-## 환경 변수
+### 지원 DB
 
-### 클라이언트 (.env.local)
-```env
-VITE_API_URL=http://localhost:8000
+- **SQLite** — 개발 환경 기본값 (`aiosqlite`)
+- **PostgreSQL** — 프로덕션 권장 (`asyncpg`)
+
+### 데이터 모델
+
+```
+┌──────────────────────────┐       ┌──────────────────────────┐
+│          posts           │       │          images          │
+├──────────────────────────┤       ├──────────────────────────┤
+│ id          (PK)         │──┐    │ id          (PK)         │
+│ title       (String)     │  │    │ storage_key (String)     │
+│ content     (Text)       │  │    │ original_filename        │
+│ slug        (Unique)     │  │    │ file_size   (Integer)    │
+│ excerpt     (String)     │  │    │ mime_type   (String)     │
+│ tags        (JSON)       │  │    │ width / height           │
+│ category_slug (String)   │  │    │ alt_text / caption       │
+│ status      (String)     │  └───>│ post_id     (FK)         │
+│ view_count  (Integer)    │       │ is_temporary (Boolean)   │
+│ created_at  (DateTime)   │       │ created_at  (DateTime)   │
+│ updated_at  (DateTime)   │       │ updated_at  (DateTime)   │
+│ published_at (DateTime)  │       │ deleted_at  (DateTime)   │
+│ deleted_at  (DateTime)   │       └──────────────────────────┘
+└──────────────────────────┘
 ```
 
-### 서버 (.env)
-```env
-SECRET_KEY=your-secret-key-here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-```
+- **소프트 삭제**: 두 모델 모두 `deleted_at` 필드를 통한 소프트 삭제 지원
+- **이미지 연결**: 포스트 마크다운 내 이미지 URL 파싱으로 자동 연결/해제
+- **비동기 처리**: SQLAlchemy AsyncSession 기반 완전 비동기 DB 액세스
 
-## 기술 스택
+---
 
-### 프론트엔드
-- React 19
-- TypeScript
-- Vite
-- Tailwind CSS 4
-- React Router
-- React Markdown
-- Highlight.js
+## 라우팅 구조
 
-### 백엔드
-- FastAPI
-- Python 3.12
-- JWT (python-jose)
-- Passlib (비밀번호 해싱)
-- Pillow (이미지 처리)
+| 경로 | 페이지 | 설명 |
+|------|--------|------|
+| `/` | Home | 최근 발행된 포스트 카드 그리드 |
+| `/board` | Board List | 포스트 목록 (검색, 태그 필터, 페이지네이션) |
+| `/board/:id` | Post Detail | 포스트 상세 (마크다운 렌더링, 조회수) |
+| `/editor` | Editor | 새 포스트 작성 (인증 필요) |
+| `/editor/:id` | Editor | 포스트 수정 (인증 필요) |
+| `/login` | Login | 로그인 페이지 |
+| `/unauthorized` | Unauthorized | 접근 거부 페이지 |
 
-## 주요 문서
+---
 
-- [이미지 업로드 가이드](./IMAGE_UPLOAD_GUIDE.md)
-- [서버 API 문서](./server/README.md)
+## 보안
 
-## 로드맵
+- **HttpOnly 쿠키**: JWT 토큰을 HttpOnly + Secure + SameSite=Lax 쿠키에 저장
+- **비밀번호 해싱**: bcrypt 기반 단방향 해싱
+- **XSS 방어**: 콘텐츠 내 `<script>`, `javascript:`, 이벤트 핸들러 제거
+- **URL 검증**: 이미지/링크 URL에서 위험한 프로토콜 차단
+- **파일명 정제**: 업로드 파일명에서 경로 탐색 문자 제거
+- **입력 검증**: Pydantic 스키마를 통한 모든 입력값 검증
+- **CORS 설정**: 허용된 오리진만 접근 가능
 
-- [x] 마크다운 에디터
-- [x] 이미지 업로드
-- [x] JWT 인증
-- [ ] 데이터베이스 연동
-- [ ] 블로그 포스트 CRUD
-- [ ] 댓글 시스템
-- [ ] 사용자 프로필
-- [ ] 검색 기능
-- [ ] 태그/카테고리
-- [ ] SEO 최적화
+---
 
 ## 라이선스
 
-MIT
-
+[Apache License 2.0](./LICENSE) - Copyright 2025 CLazyCoder63
