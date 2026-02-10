@@ -133,14 +133,14 @@ const PageLayout: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-            <article className="max-w-4xl mx-auto px-4 py-8">
+            <article className="max-w-4xl mx-auto px-4 py-6 sm:py-8">
                 {/* 헤더 섹션 */}
-                <header className="mb-8">
-                    <h1 className="text-4xl font-bold mb-4 text-gray-900 dark:text-white">
+                <header className="mb-6 sm:mb-8">
+                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">
                         {pageData.title}
                     </h1>
-                    <div className="flex items-center justify-between flex-wrap gap-4">
-                        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-400">
                             <span>작성일: {formatDate(pageData.created_at)}</span>
                             {pageData.updated_at !== pageData.created_at && (
                                 <span>수정일: {formatDate(pageData.updated_at)}</span>
@@ -153,7 +153,7 @@ const PageLayout: React.FC = () => {
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={handleEdit}
-                                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-lg transition-colors"
+                                    className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-lg transition-colors"
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -163,7 +163,7 @@ const PageLayout: React.FC = () => {
                                 <button
                                     onClick={handleDelete}
                                     disabled={isDeleting}
-                                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-50 rounded-lg transition-colors"
+                                    className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-50 rounded-lg transition-colors"
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -196,22 +196,22 @@ const PageLayout: React.FC = () => {
                         rehypePlugins={[rehypeHighlight]}
                         components={{
                             h1: ({ children }) => (
-                                <h1 className="text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100">
+                                <h1 className="text-2xl sm:text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100">
                                     {children}
                                 </h1>
                             ),
                             h2: ({ children }) => (
-                                <h2 className="text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100">
+                                <h2 className="text-xl sm:text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100">
                                     {children}
                                 </h2>
                             ),
                             h3: ({ children }) => (
-                                <h3 className="text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100">
+                                <h3 className="text-lg sm:text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100">
                                     {children}
                                 </h3>
                             ),
                             p: ({ children }) => (
-                                <p className="mb-4 leading-7 text-gray-800 dark:text-gray-300">
+                                <p className="mb-4 leading-7 text-gray-800 dark:text-gray-300 wrap-break-word">
                                     {children}
                                 </p>
                             ),

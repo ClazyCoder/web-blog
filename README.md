@@ -2,7 +2,7 @@
 
 모던 풀스택 블로그 플랫폼 — **React 19 + FastAPI**
 
-마크다운 기반 에디터, 실시간 미리보기, 이미지 업로드, JWT 인증 등을 지원하는 개인 블로그 시스템입니다.
+마크다운 기반 에디터, 실시간 미리보기, 이미지 업로드, JWT 인증, 이미지 자동 정리 등을 지원하는 개인 블로그 시스템입니다.
 
 ---
 
@@ -14,6 +14,7 @@ web-blog/
 │   ├── src/
 │   │   ├── components/       # 재사용 컴포넌트 (ContentCard, EditorSidebar, ...)
 │   │   ├── context/          # AuthContext (인증 상태 관리)
+│   │   ├── hooks/            # 커스텀 훅 (useDebounce, ...)
 │   │   ├── layouts/          # 페이지 레이아웃 (Header, Footer, Editor, Board, ...)
 │   │   ├── routes/           # 라우트 컴포넌트
 │   │   └── utils/            # API 클라이언트, 네비게이션 가드
@@ -26,6 +27,7 @@ web-blog/
 │   ├── models/               # SQLAlchemy ORM 모델 (Post, Image)
 │   ├── routers/              # API 라우터 (auth, post, image)
 │   ├── schemas/              # Pydantic 스키마 (요청/응답 검증)
+│   ├── services/             # 백그라운드 서비스 (이미지 정리 등)
 │   ├── db/                   # 데이터베이스 세션 관리
 │   ├── blog/                 # Alembic 마이그레이션
 │   ├── main.py               # FastAPI 앱 진입점
@@ -53,11 +55,12 @@ web-blog/
 | GFM 지원 | GitHub Flavored Markdown (테이블, 체크리스트 등) |
 | 코드 하이라이팅 | Highlight.js 기반 구문 강조 |
 | 임시 저장/발행 | 초안(draft) 모드와 발행(published) 모드 분리 |
-| 태그 시스템 | 포스트당 최대 10개 태그, 태그 기반 필터링 |
+| 임시저장 배너 | 새 글 작성 시 기존 임시저장 글 목록 표시 및 이어쓰기 |
+| 태그 시스템 | 포스트당 최대 10개 태그, 태그 기반 필터링, 전체 태그 목록 API |
 | 검색 | 제목/내용 전문 검색 (대소문자 무시) |
-| 페이지네이션 | 목록 페이지 10개 단위 페이지 처리 |
-| 조회수 추적 | 포스트 열람 시 자동 조회수 증가 |
-| 슬러그 URL | 제목 기반 고유 슬러그 자동 생성 |
+| 페이지네이션 | 목록 페이지 단위 페이지 처리 |
+| 조회수 추적 | 별도 POST 엔드포인트로 분리 (React StrictMode 중복 호출 방지) |
+| 슬러그 URL | 제목 기반 고유 슬러그 자동 생성 (ID 포함 중복 방지) |
 
 ### 이미지 관리
 
@@ -71,6 +74,16 @@ web-blog/
 | 자동 연결 | 포스트 저장 시 마크다운 내 이미지 자동 연결/해제 |
 | 썸네일 | 포스트 첫 번째 이미지를 썸네일로 자동 추출 |
 | 파일 검증 | 허용 확장자 (jpg, png, gif, webp), 최대 5MB |
+
+### Orphan 이미지 자동 정리
+
+| 기능 | 설명 |
+|------|------|
+| 백그라운드 스케줄러 | asyncio 기반 주기적 실행 (1시간 간격) |
+| 임시 이미지 정리 | 업로드 후 게시글에 미연결 상태로 24시간 경과 시 자동 삭제 |
+| Soft-delete 영구 삭제 | 소프트 삭제 후 7일 경과 시 파일 + DB 레코드 영구 삭제 |
+| 관리 API | Orphan 현황 조회, 목록 조회 및 수동 정리 실행 엔드포인트 제공 |
+| 관리자 페이지 | 고아 이미지 통계, 목록 확인, 개별 삭제 및 일괄 정리 UI (로그인 시 Header에 Admin 링크 표시) |
 
 ### 인증 시스템
 
@@ -88,6 +101,7 @@ web-blog/
 |------|------|
 | 반응형 디자인 | 모바일/태블릿/데스크톱 대응 (Tailwind CSS) |
 | 다크 모드 | 시스템 테마 자동 감지 (`prefers-color-scheme`) |
+| 반응형 에디터 | 모바일: 편집/미리보기 토글, 데스크톱: 분할 화면 + 리사이징 |
 | 미저장 변경 감지 | 에디터에서 이탈 시 확인 다이얼로그 (beforeunload + SPA 가드) |
 | 로딩/에러 상태 | 모든 비동기 요청에 대한 상태 처리 |
 | XSS 방어 | 이미지/링크 URL 검증, HTML 태그 제거, 파일명 정제 |
@@ -100,7 +114,7 @@ web-blog/
 
 | 기술 | 버전 | 용도 |
 |------|------|------|
-| React | 19 | UI 프레임워크 |
+| React | 19.2 | UI 프레임워크 |
 | TypeScript | 5.9 | 정적 타입 |
 | Vite | 7.2 | 빌드 도구 |
 | Tailwind CSS | 4.1 | 유틸리티 CSS |
@@ -142,8 +156,10 @@ web-blog/
 |--------|------|------|------|
 | `POST` | `/api/posts` | 포스트 생성 | 필요 |
 | `GET` | `/api/posts` | 포스트 목록 (페이지네이션, 필터) | - |
-| `GET` | `/api/posts/{id}` | 포스트 상세 (조회수 증가) | - |
+| `GET` | `/api/posts/tags` | 전체 태그 목록 (published 게시글 기준) | - |
+| `GET` | `/api/posts/{id}` | 포스트 상세 조회 | - |
 | `GET` | `/api/posts/slug/{slug}` | 슬러그로 포스트 조회 | - |
+| `POST` | `/api/posts/{id}/view` | 조회수 증가 | - |
 | `PUT` | `/api/posts/{id}` | 포스트 수정 | 필요 |
 | `DELETE` | `/api/posts/{id}` | 포스트 삭제 (`?permanent=true` 영구 삭제) | 필요 |
 
@@ -153,16 +169,24 @@ web-blog/
 |--------|------|------|------|
 | `POST` | `/api/upload/image` | 이미지 업로드 | 필요 |
 | `GET` | `/api/upload/temp/{filename}` | 임시 이미지 정보 | - |
-| `DELETE` | `/api/upload/image/{filename}` | 이미지 삭제 | 필요 |
+| `DELETE` | `/api/upload/image/{filename}` | 이미지 삭제 (소프트 삭제) | 필요 |
+
+### 이미지 관리 (Admin)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| `GET` | `/api/upload/admin/orphans` | Orphan 이미지 현황 조회 | 필요 |
+| `GET` | `/api/upload/admin/orphans/list` | Orphan 이미지 목록 조회 | 필요 |
+| `POST` | `/api/upload/admin/cleanup` | Orphan 이미지 수동 정리 실행 | 필요 |
 
 ### 기타
 
 | Method | Path | 설명 |
 |--------|------|------|
-| `GET` | `/` | API 정보 및 엔드포인트 목록 |
+| `GET` | `/` | API 정보 (프로덕션에서는 최소 정보만 반환) |
 | `GET` | `/health` | 헬스 체크 |
-| `GET` | `/docs` | Swagger UI 문서 |
-| `GET` | `/redoc` | ReDoc 문서 |
+| `GET` | `/docs` | Swagger UI 문서 (개발 환경 전용) |
+| `GET` | `/redoc` | ReDoc 문서 (개발 환경 전용) |
 
 ---
 
@@ -182,7 +206,7 @@ Docker Compose를 사용하여 전체 스택을 한 번에 실행할 수 있습�
 ```
 
 - **client** (nginx): React 빌드 파일 서빙, API 리버스 프록시, 업로드 이미지 정적 서빙
-- **server** (FastAPI): API 서버, 이미지 업로드 처리, DB 마이그레이션 자동 실행
+- **server** (FastAPI): API 서버, 이미지 업로드 처리, DB 마이그레이션 자동 실행, 이미지 정리 스케줄러
 - **db** (PostgreSQL): 데이터 저장소
 
 ### 실행
@@ -215,6 +239,7 @@ SECRET_KEY=your-production-secret-key
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=your-secure-password
 ADMIN_EMAIL=admin@example.com
+ENV=production
 ```
 
 ### 서비스 구성
@@ -301,7 +326,17 @@ ADMIN_EMAIL=admin@example.com
 
 # 데이터베이스 (미설정 시 SQLite 사용)
 DATABASE_URL=sqlite+aiosqlite:///./blog.db
-# PostgreSQL 예시: postgresql://user:pass@localhost/blogdb
+# PostgreSQL 예시: postgresql+asyncpg://user:pass@localhost:5432/blogdb
+
+# CORS 허용 오리진 (쉼표 구분)
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+
+# 이미지 URL 베이스 (빈 문자열 = 상대 경로, nginx 프록시 환경에서 사용)
+BASE_URL=
+
+# 환경 (development / production)
+# production: API 문서 (/docs, /redoc, /openapi.json) 비활성화
+ENV=development
 ```
 
 ---
@@ -368,6 +403,7 @@ pytest
 
 - **소프트 삭제**: 두 모델 모두 `deleted_at` 필드를 통한 소프트 삭제 지원
 - **이미지 연결**: 포스트 마크다운 내 이미지 URL 파싱으로 자동 연결/해제
+- **이미지 정리**: 미연결 임시 이미지(24시간) 및 소프트 삭제 이미지(7일) 자동 정리
 - **비동기 처리**: SQLAlchemy AsyncSession 기반 완전 비동기 DB 액세스
 
 ---
@@ -381,6 +417,7 @@ pytest
 | `/board/:id` | Post Detail | 포스트 상세 (마크다운 렌더링, 조회수) |
 | `/editor` | Editor | 새 포스트 작성 (인증 필요) |
 | `/editor/:id` | Editor | 포스트 수정 (인증 필요) |
+| `/admin` | Admin | 관리자 페이지 (인증 필요, 고아 이미지 관리) |
 | `/login` | Login | 로그인 페이지 |
 | `/unauthorized` | Unauthorized | 접근 거부 페이지 |
 
@@ -391,10 +428,11 @@ pytest
 - **HttpOnly 쿠키**: JWT 토큰을 HttpOnly + Secure + SameSite=Lax 쿠키에 저장
 - **비밀번호 해싱**: bcrypt 기반 단방향 해싱
 - **XSS 방어**: 콘텐츠 내 `<script>`, `javascript:`, 이벤트 핸들러 제거
-- **URL 검증**: 이미지/링크 URL에서 위험한 프로토콜 차단
-- **파일명 정제**: 업로드 파일명에서 경로 탐색 문자 제거
+- **URL 검증**: 이미지/링크 URL에서 위험한 프로토콜 차단 (`javascript:`, `data:`, `vbscript:`)
+- **파일명 정제**: 업로드 파일명에서 경로 탐색 문자 제거, 안전 문자만 허용
 - **입력 검증**: Pydantic 스키마를 통한 모든 입력값 검증
-- **CORS 설정**: 허용된 오리진만 접근 가능
+- **CORS 설정**: 환경 변수 기반 허용 오리진 관리
+- **프로덕션 보호**: `ENV=production`에서 API 문서 (`/docs`, `/redoc`, `/openapi.json`) 자동 비활성화
 
 ---
 

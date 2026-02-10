@@ -2,10 +2,12 @@
 게시글 라우터 - CRUD API
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import selectinload
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from typing import Optional, List
 import re
 from datetime import datetime
@@ -15,6 +17,8 @@ from models.post import Post
 from models.image import Image
 from auth import get_current_user
 from schemas.post import PostCreate, PostUpdate, PostResponse, PaginatedPostResponse
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(
     prefix="/api/posts",
@@ -110,7 +114,9 @@ def generate_slug(title: str, post_id: Optional[int] = None) -> str:
 # ==================== CRUD API 엔드포인트 ====================
 
 @router.post("/{post_id}/view", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 async def increment_view_count(
+    request: Request,
     post_id: int,
     db: AsyncSession = Depends(get_db)
 ):
@@ -137,7 +143,9 @@ async def increment_view_count(
 
 
 @router.post("", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 async def create_post(
+    request: Request,
     post_data: PostCreate,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -219,7 +227,7 @@ async def get_posts(
     skip: int = Query(0, ge=0, description="건너뛸 개수"),
     limit: int = Query(20, ge=1, le=100, description="가져올 개수"),
     category_slug: Optional[str] = Query(None, description="카테고리 필터"),
-    tag: Optional[str] = Query(None, description="태그 필터"),
+    tags: Optional[str] = Query(None, description="태그 필터 (쉼표 구분, 예: python,fastapi)"),
     search: Optional[str] = Query(None, description="검색어 (제목, 내용)"),
     post_status: Optional[str] = Query(None, alias="status", description="상태 필터: draft, published"),
     db: AsyncSession = Depends(get_db)
@@ -231,7 +239,7 @@ async def get_posts(
         skip: 건너뛸 개수 (오프셋)
         limit: 가져올 개수 (최대 100)
         category_slug: 카테고리 필터
-        tag: 태그 필터 (하나의 태그)
+        tags: 태그 필터 (쉼표 구분, 복수 태그 AND 조건)
         search: 검색어
         post_status: 상태 필터
         db: 비동기 데이터베이스 세션
@@ -249,8 +257,10 @@ async def get_posts(
         if category_slug:
             conditions.append(Post.category_slug == category_slug)
         
-        if tag:
-            conditions.append(Post.tags.contains([tag]))
+        if tags:
+            tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+            for t in tag_list:
+                conditions.append(Post.tags.contains([t]))
         
         if search:
             search_pattern = f"%{search}%"
@@ -296,6 +306,39 @@ async def get_posts(
         )
 
 
+@router.get("/tags")
+async def get_all_tags(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    모든 published 게시글의 고유 태그 목록 반환 (정렬됨)
+    
+    Returns:
+        { "tags": ["fastapi", "python", "react", ...] }
+    """
+    try:
+        stmt = select(Post.tags).where(
+            Post.deleted_at.is_(None),
+            Post.status == "published",
+            Post.tags.isnot(None),
+        )
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+        
+        tag_set: set[str] = set()
+        for tags in rows:
+            if isinstance(tags, list):
+                tag_set.update(tags)
+        
+        return {"tags": sorted(tag_set)}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"태그 목록 조회 실패: {str(e)}"
+        )
+
+
 @router.get("/{post_id}", response_model=PostResponse)
 async def get_post(
     post_id: int,
@@ -329,7 +372,9 @@ async def get_post(
 
 
 @router.put("/{post_id}", response_model=PostResponse)
+@limiter.limit("20/minute")
 async def update_post(
+    request: Request,
     post_id: int,
     post_data: PostUpdate,
     current_user: dict = Depends(get_current_user),
@@ -395,7 +440,9 @@ async def update_post(
 
 
 @router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("20/minute")
 async def delete_post(
+    request: Request,
     post_id: int,
     permanent: bool = Query(False, description="영구 삭제 여부"),
     current_user: dict = Depends(get_current_user),

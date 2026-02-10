@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import useDebounce from '../hooks/useDebounce';
 import api from '../utils/api';
 
 interface Post {
@@ -23,16 +24,51 @@ const POSTS_PER_PAGE = 10;
 const ListLayout: React.FC = () => {
     const navigate = useNavigate();
     const { isAuthenticated } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // URL 파라미터에서 초기 상태 복원
+    const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+    const [selectedTags, setSelectedTags] = useState<string[]>(() => {
+        const tagsParam = searchParams.get('tags');
+        return tagsParam ? tagsParam.split(',').filter(Boolean) : [];
+    });
+    const [currentPage, setCurrentPage] = useState(() => {
+        const pageParam = searchParams.get('page');
+        return pageParam ? Math.max(1, parseInt(pageParam, 10) || 1) : 1;
+    });
+
     const [posts, setPosts] = useState<Post[]>([]);
     const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedTag, setSelectedTag] = useState<string>('all');
     const [allTags, setAllTags] = useState<string[]>([]);
-    const [currentPage, setCurrentPage] = useState(1);
     const [totalPosts, setTotalPosts] = useState(0);
 
+    const debouncedSearch = useDebounce(searchTerm, 300);
     const totalPages = Math.max(1, Math.ceil(totalPosts / POSTS_PER_PAGE));
 
+    // URL 쿼리 파라미터 동기화
+    useEffect(() => {
+        const params: Record<string, string> = {};
+        if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+        if (selectedTags.length > 0) params.tags = selectedTags.join(',');
+        if (currentPage > 1) params.page = String(currentPage);
+
+        setSearchParams(params, { replace: true });
+    }, [debouncedSearch, selectedTags, currentPage, setSearchParams]);
+
+    // 태그 목록 가져오기 (마운트 시 1회)
+    useEffect(() => {
+        const controller = new AbortController();
+        api.get('/api/posts/tags', { signal: controller.signal })
+            .then(res => setAllTags(res.data.tags || []))
+            .catch(err => {
+                if (err?.name !== 'CanceledError') {
+                    console.error('태그 목록 로드 실패:', err);
+                }
+            });
+        return () => controller.abort();
+    }, []);
+
+    // 게시글 목록 가져오기
     const fetchPosts = useCallback(async (signal?: AbortSignal) => {
         try {
             setLoading(true);
@@ -42,27 +78,16 @@ const ListLayout: React.FC = () => {
                 status: 'published',
             };
 
-            if (searchTerm.trim()) {
-                params.search = searchTerm.trim();
+            if (debouncedSearch.trim()) {
+                params.search = debouncedSearch.trim();
             }
-            if (selectedTag !== 'all') {
-                params.tag = selectedTag;
+            if (selectedTags.length > 0) {
+                params.tags = selectedTags.join(',');
             }
 
             const response = await api.get('/api/posts', { params, signal });
             setPosts(response.data.items);
             setTotalPosts(response.data.total);
-
-            // 응답에서 태그 수집 (별도 API 호출 없이)
-            setAllTags(prev => {
-                const tagSet = new Set(prev);
-                response.data.items.forEach((post: Post) => {
-                    post.tags.forEach((tag: string) => tagSet.add(tag));
-                });
-                const sorted = Array.from(tagSet).sort();
-                // 변경이 없으면 이전 배열 유지 (리렌더 방지)
-                return sorted.length === prev.length && sorted.every((t, i) => t === prev[i]) ? prev : sorted;
-            });
         } catch (err: any) {
             if (err?.name !== 'CanceledError') {
                 console.error('게시글 로드 실패:', err);
@@ -70,23 +95,34 @@ const ListLayout: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [currentPage, searchTerm, selectedTag]);
+    }, [currentPage, debouncedSearch, selectedTags]);
 
-    // 페이지/필터 변경 시 데이터 로드
+    // 디바운스된 검색어/태그/페이지 변경 시 데이터 로드
     useEffect(() => {
         const controller = new AbortController();
         fetchPosts(controller.signal);
         return () => controller.abort();
     }, [fetchPosts]);
 
-    // 검색어 또는 태그 변경 시 1페이지로 리셋
+    // 검색어 변경 시 1페이지로 리셋
     const handleSearchChange = (value: string) => {
         setSearchTerm(value);
         setCurrentPage(1);
     };
 
-    const handleTagChange = (value: string) => {
-        setSelectedTag(value);
+    // 태그 칩 토글
+    const handleTagToggle = (tag: string) => {
+        setSelectedTags(prev =>
+            prev.includes(tag)
+                ? prev.filter(t => t !== tag)
+                : [...prev, tag]
+        );
+        setCurrentPage(1);
+    };
+
+    // 선택된 태그 전체 초기화
+    const handleClearTags = () => {
+        setSelectedTags([]);
         setCurrentPage(1);
     };
 
@@ -152,39 +188,54 @@ const ListLayout: React.FC = () => {
                         )}
                     </div>
 
-                    {/* 검색 및 필터 */}
-                    <div className="flex flex-col md:flex-row gap-4">
-                        {/* 검색 */}
-                        <div className="flex-1 relative">
-                            <input
-                                type="text"
-                                value={searchTerm}
-                                onChange={(e) => handleSearchChange(e.target.value)}
-                                placeholder="검색어를 입력하세요..."
-                                className="w-full px-4 py-2.5 pl-10 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
-                            />
-                            <svg 
-                                className="absolute left-3 top-3 w-5 h-5 text-gray-400"
-                                fill="none" 
-                                stroke="currentColor" 
-                                viewBox="0 0 24 24"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                        </div>
-
-                        {/* 태그 필터 */}
-                        <select
-                            value={selectedTag}
-                            onChange={(e) => handleTagChange(e.target.value)}
-                            className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
+                    {/* 검색 */}
+                    <div className="relative mb-4">
+                        <input
+                            type="text"
+                            value={searchTerm}
+                            onChange={(e) => handleSearchChange(e.target.value)}
+                            placeholder="검색어를 입력하세요..."
+                            className="w-full px-4 py-2.5 pl-10 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
+                        />
+                        <svg
+                            className="absolute left-3 top-3 w-5 h-5 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
                         >
-                            <option value="all">모든 태그</option>
-                            {allTags.map(tag => (
-                                <option key={tag} value={tag}>{tag}</option>
-                            ))}
-                        </select>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
                     </div>
+
+                    {/* 태그 칩 필터 */}
+                    {allTags.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2">
+                            {selectedTags.length > 0 && (
+                                <button
+                                    onClick={handleClearTags}
+                                    className="px-3 py-1.5 text-xs font-medium rounded-full border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                >
+                                    초기화
+                                </button>
+                            )}
+                            {allTags.map(tag => {
+                                const isSelected = selectedTags.includes(tag);
+                                return (
+                                    <button
+                                        key={tag}
+                                        onClick={() => handleTagToggle(tag)}
+                                        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                                            isSelected
+                                                ? 'bg-emerald-600 text-white shadow-sm'
+                                                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                                        }`}
+                                    >
+                                        {tag}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
 
                 {/* 게시글 목록 */}

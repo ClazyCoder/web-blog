@@ -99,6 +99,16 @@ const EditorLayout: React.FC = () => {
                 setHasUnsavedChanges(false);
                 setPostId(post.id);
                 setOriginalStatus(post.status);
+
+                // 서버 DB에서 관리하는 이미지 목록을 사이드바에 표시
+                if (post.images && post.images.length > 0) {
+                    const existingImages: UploadedImage[] = post.images.map((img: any) => ({
+                        url: img.file_url,
+                        filename: img.original_filename || img.filename,
+                        uploadedAt: new Date(img.created_at || Date.now()).getTime(),
+                    }));
+                    setUploadedImages(existingImages);
+                }
             } catch (err) {
                 console.error('게시글 로드 실패:', err);
                 alert('게시글을 불러오는데 실패했습니다.');
@@ -708,19 +718,19 @@ const EditorLayout: React.FC = () => {
 
                 {/* 헤더 */}
                 <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
                         <input
                             type="text"
                             value={editorData.title}
                             onChange={(e) => setEditorData({ ...editorData, title: e.target.value })}
                             placeholder="제목을 입력하세요"
-                            className="flex-1 text-2xl font-bold bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400"
+                            className="w-full sm:flex-1 text-xl sm:text-2xl font-bold bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400"
                         />
-                        <div className="flex items-center gap-2 ml-4">
+                        <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
                             {/* 모바일 전용 편집/미리보기 토글 */}
                             <button
                                 onClick={() => setIsPreviewMode(!isPreviewMode)}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors lg:hidden"
+                                className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors lg:hidden whitespace-nowrap"
                             >
                                 {isPreviewMode ? '편집' : '미리보기'}
                             </button>
@@ -741,7 +751,7 @@ const EditorLayout: React.FC = () => {
                             </button>
                             <button
                                 onClick={handleClear}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors whitespace-nowrap"
                             >
                                 초기화
                             </button>
@@ -750,7 +760,7 @@ const EditorLayout: React.FC = () => {
                                 <button
                                     onClick={handleSave}
                                     disabled={isSaving || isDraftSaving}
-                                    className="px-6 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 rounded transition-colors"
+                                    className="px-4 sm:px-6 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 rounded transition-colors whitespace-nowrap"
                                 >
                                     {isSaving ? '저장 중...' : '저장'}
                                 </button>
@@ -760,14 +770,14 @@ const EditorLayout: React.FC = () => {
                                     <button
                                         onClick={handleDraftSave}
                                         disabled={isDraftSaving || isSaving}
-                                        className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 rounded transition-colors"
+                                        className="px-3 sm:px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 rounded transition-colors whitespace-nowrap"
                                     >
                                         {isDraftSaving ? '저장 중...' : '임시 저장'}
                                     </button>
                                     <button
                                         onClick={handleSave}
                                         disabled={isSaving || isDraftSaving}
-                                        className="px-6 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 rounded transition-colors"
+                                        className="px-4 sm:px-6 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 rounded transition-colors whitespace-nowrap"
                                     >
                                         {isSaving ? '발행 중...' : '발행'}
                                     </button>
@@ -864,11 +874,8 @@ const EditorLayout: React.FC = () => {
                 <div id="editor-container" className="flex flex-col lg:flex-row h-[calc(100vh-180px)]">
                     {/* 편집기 */}
                     <div
-                        className={`relative ${isPreviewMode ? 'hidden lg:block' : ''}`}
-                        style={{ 
-                            width: showPreview ? `${editorWidth}%` : '100%',
-                            display: window.innerWidth < 1024 ? (isPreviewMode ? 'none' : 'block') : 'block'
-                        }}
+                        className={`relative ${isPreviewMode ? 'hidden lg:block' : 'block'}`}
+                        style={{ width: showPreview ? `${editorWidth}%` : '100%' }}
                         onDragEnter={handleDragEnter}
                         onDragLeave={handleDragLeave}
                         onDragOver={handleDragOver}
@@ -908,11 +915,8 @@ const EditorLayout: React.FC = () => {
                     {/* 미리보기 */}
                     {showPreview && (
                         <div 
-                            className={`overflow-y-auto bg-white dark:bg-gray-800 ${!isPreviewMode ? 'hidden lg:block' : ''}`}
-                            style={{ 
-                                width: `${100 - editorWidth}%`,
-                                display: window.innerWidth < 1024 ? (isPreviewMode ? 'block' : 'none') : 'block'
-                            }}
+                            className={`overflow-y-auto bg-white dark:bg-gray-800 ${isPreviewMode ? 'block' : 'hidden lg:block'}`}
+                            style={{ width: `${100 - editorWidth}%` }}
                         >
                             <span className="p-2 text-sm italic font-bold mb-4 mt-8 text-gray-700 dark:text-gray-300">미리보기</span>
                             <div className="p-6 max-w-4xl mx-auto">
@@ -1128,6 +1132,13 @@ const EditorLayout: React.FC = () => {
                     }
                     .toolbar-btn:hover {
                         background-color: rgb(55, 65, 81);
+                    }
+                }
+                /* 모바일에서 에디터/미리보기 영역 전체 너비 강제 */
+                @media (max-width: 1023px) {
+                    #editor-container > div {
+                        width: 100% !important;
+                        flex: 1 1 auto;
                     }
                 }
             `}</style>

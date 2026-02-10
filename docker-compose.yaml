@@ -29,6 +29,8 @@ services:
       db:
         condition: service_healthy
     environment:
+      # 환경 설정 (production에서 API 문서 비활성화)
+      ENV: production
       # 데이터베이스
       DATABASE_URL: postgresql+asyncpg://blog_user:blog_password@db:5432/blog_db
       # 인증
