@@ -99,6 +99,16 @@ const EditorLayout: React.FC = () => {
                 setHasUnsavedChanges(false);
                 setPostId(post.id);
                 setOriginalStatus(post.status);
+
+                // 서버 DB에서 관리하는 이미지 목록을 사이드바에 표시
+                if (post.images && post.images.length > 0) {
+                    const existingImages: UploadedImage[] = post.images.map((img: any) => ({
+                        url: img.file_url,
+                        filename: img.original_filename || img.filename,
+                        uploadedAt: new Date(img.created_at || Date.now()).getTime(),
+                    }));
+                    setUploadedImages(existingImages);
+                }
             } catch (err) {
                 console.error('게시글 로드 실패:', err);
                 alert('게시글을 불러오는데 실패했습니다.');

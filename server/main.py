@@ -3,6 +3,8 @@ Web Blog Server - Main Application
 FastAPI 기반 블로그 서버
 """
 
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,13 +17,39 @@ import uvicorn
 from routers import image, auth as auth_router, post
 import auth
 
+# 서비스 임포트
+from services.image_cleanup import start_cleanup_scheduler
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """앱 생명주기 관리 (startup / shutdown)"""
+    # Startup: 백그라운드 태스크 시작
+    cleanup_task = asyncio.create_task(start_cleanup_scheduler())
+    yield
+    # Shutdown: 백그라운드 태스크 정리
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+
+
+# 환경 판별 (production에서는 API 문서 비활성화)
+IS_PRODUCTION = os.getenv("ENV", "development").lower() == "production"
+
 # FastAPI 앱 초기화
 app = FastAPI(
     title="Web Blog API",
     description="블로그 시스템 API",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
+    lifespan=lifespan,
 )
 
 # CORS 설정 (환경 변수로 오리진 관리)
@@ -55,6 +83,12 @@ async def root():
     """
     API 루트 엔드포인트
     """
+    if IS_PRODUCTION:
+        return {
+            "message": "Web Blog API Server",
+            "version": "1.0.0",
+        }
+
     return {
         "message": "Web Blog API Server",
         "version": "1.0.0",
@@ -67,7 +101,9 @@ async def root():
             "image": {
                 "upload": "POST /api/upload/image",
                 "get_info": "GET /api/upload/temp/{filename}",
-                "delete": "DELETE /api/upload/image/{filename}"
+                "delete": "DELETE /api/upload/image/{filename}",
+                "orphan_stats": "GET /api/upload/admin/orphans",
+                "manual_cleanup": "POST /api/upload/admin/cleanup"
             },
             "posts": {
                 "create": "POST /api/posts",

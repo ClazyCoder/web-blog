@@ -102,6 +102,29 @@ class PostUpdate(BaseModel):
         return v
 
 
+class ImageResponse(BaseModel):
+    """이미지 응답 스키마"""
+    id: int
+    storage_key: str
+    filename: str
+    original_filename: str
+    file_url: str
+    file_size: int
+    mime_type: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    alt_text: Optional[str] = None
+    caption: Optional[str] = None
+    post_id: Optional[int] = None
+    is_temporary: bool = False
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    deleted_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class PostResponse(BaseModel):
     """게시글 응답 스키마 (개선 버전)"""
     id: int
@@ -115,6 +138,7 @@ class PostResponse(BaseModel):
     is_published: bool  # 편의성 property
     view_count: int
     thumbnail: Optional[str] = None  # 첫 번째 이미지 URL (썸네일)
+    images: List[ImageResponse] = []  # 연결된 이미지 목록 (상세 조회 시)
     created_at: str
     updated_at: str
     published_at: Optional[str]
