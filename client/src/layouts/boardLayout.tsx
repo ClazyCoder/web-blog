@@ -50,14 +50,14 @@ const BoardLayout: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+            <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-6 sm:py-8">
                 <div className="container mx-auto px-4">
-                    <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">
+                    <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-gray-900 dark:text-white">
                         게시글
                     </h1>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                         {[...Array(6)].map((_, i) => (
-                            <div key={i} className="rounded-lg overflow-hidden shadow-lg bg-gray-200 dark:bg-gray-700 animate-pulse h-[280px]" />
+                            <div key={i} className="rounded-lg overflow-hidden shadow-lg bg-gray-200 dark:bg-gray-700 animate-pulse h-[250px] sm:h-[280px]" />
                         ))}
                     </div>
                 </div>
@@ -92,9 +92,9 @@ const BoardLayout: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-6 sm:py-8">
             <div className="container mx-auto px-4">
-                <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">
+                <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-gray-900 dark:text-white">
                     게시글
                 </h1>
                 {posts.length === 0 ? (
@@ -102,7 +102,7 @@ const BoardLayout: React.FC = () => {
                         <p className="text-lg">아직 게시글이 없습니다.</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                         {posts.map((post) => (
                             <ContentCard
                                 key={post.id}
