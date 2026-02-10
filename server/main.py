@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+import os
 import uvicorn
 
 # 라우터 임포트
@@ -23,14 +24,15 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS 설정
+# CORS 설정 (환경 변수로 오리진 관리)
+cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:3000"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite 개발 서버
-        "http://localhost:3000",  # React 개발 서버 (예비)
-        # 프로덕션 도메인 추가
-    ],
+    allow_origins=[origin.strip() for origin in cors_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

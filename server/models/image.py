@@ -5,6 +5,7 @@ Image 모델 - 게시글 이미지
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+import os
 from .base import Base
 
 
@@ -65,25 +66,26 @@ class Image(Base):
         """파일명 추출 (storage_key에서, 호환성 유지)"""
         return self.storage_key.split('/')[-1] if '/' in self.storage_key else self.storage_key
     
-    def get_url(self, base_url: str = "http://localhost:8000") -> str:
+    def get_url(self, base_url: str = None) -> str:
         """
         동적으로 URL 생성 (싱크 문제 해결)
         
         Args:
-            base_url: 기본 서버 URL (환경 변수로 설정 권장)
+            base_url: 기본 서버 URL (미설정 시 환경 변수 BASE_URL 사용)
         
         Returns:
             접근 가능한 이미지 URL
         """
-        # 로컬 스토리지 예시
+        if base_url is None:
+            base_url = os.getenv("BASE_URL", "http://localhost:8000")
         return f"{base_url}/uploads/{self.storage_key}"
     
-    def to_dict(self, base_url: str = "http://localhost:8000"):
+    def to_dict(self, base_url: str = None):
         """
         딕셔너리로 변환 (API 응답용)
         
         Args:
-            base_url: URL 생성을 위한 기본 URL
+            base_url: URL 생성을 위한 기본 URL (미설정 시 환경 변수 BASE_URL 사용)
         """
         return {
             "id": self.id,

@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Optional
 import re
 from PIL import Image as PILImage
+import os
 from auth import get_current_user
 from db.session import get_db
 from models.image import Image
@@ -166,7 +167,7 @@ async def upload_image(
         await db.refresh(new_image)
         
         # URL 동적 생성
-        base_url = "http://localhost:8000"  # TODO: 환경 변수로 관리
+        base_url = os.getenv("BASE_URL", "http://localhost:8000")
         
         return {
             "success": True,
@@ -214,7 +215,7 @@ async def get_temp_image_info(
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
     
-    base_url = "http://localhost:8000"  # TODO: 환경 변수
+    base_url = os.getenv("BASE_URL", "http://localhost:8000")
     return image.to_dict(base_url)
 
 

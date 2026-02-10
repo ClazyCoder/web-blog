@@ -23,6 +23,9 @@ if config.config_file_name is not None:
 
 db_url = os.getenv("DATABASE_URL")
 if db_url:
+    # PostgreSQL의 경우 asyncpg 드라이버 형식으로 변환
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     config.set_main_option("sqlalchemy.url", db_url)
 else:
     raise ValueError("DATABASE_URL is not set")

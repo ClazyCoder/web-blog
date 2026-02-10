@@ -17,6 +17,8 @@ web-blog/
 │   │   ├── layouts/          # 페이지 레이아웃 (Header, Footer, Editor, Board, ...)
 │   │   ├── routes/           # 라우트 컴포넌트
 │   │   └── utils/            # API 클라이언트, 네비게이션 가드
+│   ├── Dockerfile            # 멀티 스테이지 빌드 (Node + nginx)
+│   ├── nginx.conf            # nginx 설정 (프록시 + 정적 서빙)
 │   ├── package.json
 │   └── vite.config.ts
 │
@@ -28,8 +30,11 @@ web-blog/
 │   ├── blog/                 # Alembic 마이그레이션
 │   ├── main.py               # FastAPI 앱 진입점
 │   ├── auth.py               # JWT 인증 로직
+│   ├── Dockerfile            # Python + uv 기반 빌드
+│   ├── entrypoint.sh         # 마이그레이션 + 서버 시작
 │   └── pyproject.toml
 │
+├── docker-compose.yaml       # Docker Compose 설정
 ├── LICENSE                   # Apache License 2.0
 └── README.md
 ```
@@ -161,7 +166,68 @@ web-blog/
 
 ---
 
-## 빠른 시작
+## Docker 배포
+
+Docker Compose를 사용하여 전체 스택을 한 번에 실행할 수 있습니다.
+
+### 아키텍처
+
+```
+[Browser] → [nginx (client)]
+               ├── / ─────────→ SPA 정적 파일
+               ├── /api/* ────→ [FastAPI (server)] → [PostgreSQL (db)]
+               └── /uploads/* → 공유 볼륨 (정적 서빙)
+                                      ↑
+                              [server 이미지 업로드]
+```
+
+- **client** (nginx): React 빌드 파일 서빙, API 리버스 프록시, 업로드 이미지 정적 서빙
+- **server** (FastAPI): API 서버, 이미지 업로드 처리, DB 마이그레이션 자동 실행
+- **db** (PostgreSQL): 데이터 저장소
+
+### 실행
+
+```bash
+# 전체 스택 빌드 및 실행
+docker compose up -d --build
+
+# 로그 확인
+docker compose logs -f
+
+# 중지
+docker compose down
+
+# 데이터 포함 완전 삭제
+docker compose down -v
+```
+
+> 접속: http://localhost
+>
+> API 문서: http://localhost/docs
+
+### 환경 변수 커스터마이징
+
+프로젝트 루트에 `.env` 파일을 생성하여 기본값을 덮어쓸 수 있습니다.
+
+```env
+# .env (프로젝트 루트)
+SECRET_KEY=your-production-secret-key
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-secure-password
+ADMIN_EMAIL=admin@example.com
+```
+
+### 서비스 구성
+
+| 서비스 | 이미지 | 포트 | 볼륨 |
+|--------|--------|------|------|
+| client | nginx:alpine | 80:80 | `uploads` (읽기 전용) |
+| server | python:3.12-slim | 8000 (내부) | `uploads` (읽기/쓰기) |
+| db | postgres:18.1-alpine | 5432 (내부) | `pgdata` |
+
+---
+
+## 로컬 개발 (Docker 없이)
 
 ### 필수 요구사항
 
