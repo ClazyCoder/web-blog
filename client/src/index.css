@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* 다크모드 활성화 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+}
+
+/* Markdown 콘텐츠 다크모드 스타일 */
+@media (prefers-color-scheme: dark) {
+  .markdown-content {
+    color: #e5e7eb;
+  }
+
+  .markdown-content h1,
+  .markdown-content h2,
+  .markdown-content h3,
+  .markdown-content h4,
+  .markdown-content h5,
+  .markdown-content h6 {
+    color: #f9fafb;
+  }
+
+  .markdown-content a {
+    color: #34d399;
+  }
+
+  .markdown-content a:hover {
+    color: #6ee7b7;
+  }
+
+  .markdown-content strong {
+    color: #f9fafb;
+  }
+
+  .markdown-content code {
+    background-color: #374151;
+    color: #e5e7eb;
+  }
+
+  .markdown-content pre {
+    background-color: #1f2937 !important;
+  }
+
+  .markdown-content blockquote {
+    color: #d1d5db;
+    border-left-color: #4b5563;
+  }
+
+  .markdown-content table th {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .markdown-content table td {
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .markdown-content hr {
+    border-color: #4b5563;
+  }
+
+  /* 다크모드 코드 하이라이팅 스타일 재정의 */
+  .markdown-content pre code.hljs {
+    background-color: #1f2937 !important;
+    color: #e5e7eb !important;
+  }
+
+  .markdown-content .hljs-comment,
+  .markdown-content .hljs-quote {
+    color: #6b7280 !important;
+  }
+
+  .markdown-content .hljs-keyword,
+  .markdown-content .hljs-selector-tag,
+  .markdown-content .hljs-subst {
+    color: #c084fc !important;
+  }
+
+  .markdown-content .hljs-number,
+  .markdown-content .hljs-literal,
+  .markdown-content .hljs-variable,
+  .markdown-content .hljs-template-variable,
+  .markdown-content .hljs-tag .hljs-attr {
+    color: #f87171 !important;
+  }
+
+  .markdown-content .hljs-string,
+  .markdown-content .hljs-doctag {
+    color: #34d399 !important;
+  }
+
+  .markdown-content .hljs-title,
+  .markdown-content .hljs-section,
+  .markdown-content .hljs-selector-id {
+    color: #34d399 !important;
+  }
+
+  .markdown-content .hljs-type,
+  .markdown-content .hljs-class .hljs-title {
+    color: #fbbf24 !important;
+  }
+
+  .markdown-content .hljs-tag,
+  .markdown-content .hljs-name,
+  .markdown-content .hljs-attribute {
+    color: #a78bfa !important;
+  }
+
+  .markdown-content .hljs-regexp,
+  .markdown-content .hljs-link {
+    color: #fb923c !important;
+  }
+
+  .markdown-content .hljs-symbol,
+  .markdown-content .hljs-bullet {
+    color: #ec4899 !important;
+  }
+
+  .markdown-content .hljs-built_in,
+  .markdown-content .hljs-builtin-name {
+    color: #06b6d4 !important;
+  }
+
+  .markdown-content .hljs-meta {
+    color: #9ca3af !important;
+  }
+
+  .markdown-content .hljs-deletion {
+    background: #991b1b !important;
+  }
+
+  .markdown-content .hljs-addition {
+    background: #065f46 !important;
+  }
+
+  .markdown-content .hljs-emphasis {
+    font-style: italic;
+  }
+
+  .markdown-content .hljs-strong {
+    font-weight: bold;
+  }
+}

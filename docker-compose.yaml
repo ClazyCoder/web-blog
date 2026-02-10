@@ -1,0 +1,66 @@
+services:
+  # ============================================
+  # PostgreSQL 데이터베이스
+  # ============================================
+  db:
+    image: postgres:18.1-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: blog_db
+      POSTGRES_USER: blog_user
+      POSTGRES_PASSWORD: blog_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blog_user -d blog_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # FastAPI 백엔드
+  # ============================================
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # 데이터베이스
+      DATABASE_URL: postgresql+asyncpg://blog_user:blog_password@db:5432/blog_db
+      # 인증
+      SECRET_KEY: ${SECRET_KEY:-change-this-secret-key-in-production}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      # 이미지 URL (빈 문자열 = 상대 경로, nginx 프록시 사용)
+      BASE_URL: ""
+      # CORS (Docker 내부에서는 nginx 프록시로 same-origin)
+      CORS_ORIGINS: "http://localhost,http://localhost:80"
+    volumes:
+      - uploads:/app/uploads
+
+  # ============================================
+  # React 프론트엔드 (nginx)
+  # ============================================
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_SITE_NAME: ${SITE_NAME:-YSG Blog}
+        VITE_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+    volumes:
+      - uploads:/data/uploads:ro
+
+volumes:
+  pgdata:
+  uploads:
