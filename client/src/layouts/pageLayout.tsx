@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -31,8 +31,11 @@ const PageLayout: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const viewCounted = useRef(false);
 
     useEffect(() => {
+        const controller = new AbortController();
+
         const fetchPost = async () => {
             if (!id) {
                 setError('잘못된 접근입니다.');
@@ -42,20 +45,33 @@ const PageLayout: React.FC = () => {
 
             try {
                 setLoading(true);
-                const response = await api.get(`/api/posts/${id}`);
+                const response = await api.get(`/api/posts/${id}`, {
+                    signal: controller.signal,
+                });
                 setPageData(response.data);
+
+                // 조회수 증가 (한 번만 호출)
+                if (!viewCounted.current) {
+                    viewCounted.current = true;
+                    api.post(`/api/posts/${id}/view`).catch(() => {});
+                }
             } catch (err: any) {
+                if (controller.signal.aborted) return;
                 if (err.response?.status === 404) {
                     setError('게시글을 찾을 수 없습니다.');
                 } else {
                     setError('게시글을 불러오는데 실패했습니다.');
                 }
             } finally {
-                setLoading(false);
+                if (!controller.signal.aborted) {
+                    setLoading(false);
+                }
             }
         };
 
         fetchPost();
+
+        return () => controller.abort();
     }, [id]);
 
     const handleEdit = () => {

@@ -109,6 +109,33 @@ def generate_slug(title: str, post_id: Optional[int] = None) -> str:
 
 # ==================== CRUD API 엔드포인트 ====================
 
+@router.post("/{post_id}/view", status_code=status.HTTP_204_NO_CONTENT)
+async def increment_view_count(
+    post_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    조회수 증가 (별도 엔드포인트)
+    GET 조회와 분리하여 React StrictMode 등에 의한 중복 호출 방지
+    
+    Args:
+        post_id: 게시글 ID
+        db: 비동기 데이터베이스 세션
+    """
+    stmt = select(Post).filter(Post.id == post_id, Post.deleted_at.is_(None))
+    result = await db.execute(stmt)
+    post = result.scalar_one_or_none()
+    
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="게시글을 찾을 수 없습니다"
+        )
+    
+    post.view_count += 1
+    await db.commit()
+
+
 @router.post("", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
 async def create_post(
     post_data: PostCreate,
@@ -298,12 +325,6 @@ async def get_post(
             detail="게시글을 찾을 수 없습니다"
         )
     
-    # 조회수 증가
-    post.view_count += 1
-    await db.commit()
-    await db.refresh(post)  # 모든 scalar 속성 refresh
-    await db.refresh(post, attribute_names=["images"])  # images 관계 refresh
-    
     return PostResponse(**post.to_dict())
 
 
@@ -445,11 +466,5 @@ async def get_post_by_slug(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="게시글을 찾을 수 없습니다"
         )
-    
-    # 조회수 증가
-    post.view_count += 1
-    await db.commit()
-    await db.refresh(post)  # 모든 scalar 속성 refresh
-    await db.refresh(post, attribute_names=["images"])  # images 관계 refresh
     
     return PostResponse(**post.to_dict())
