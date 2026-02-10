@@ -4,7 +4,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import cast, desc, func, or_, select, String
 from sqlalchemy.orm import selectinload
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -260,7 +260,10 @@ async def get_posts(
         if tags:
             tag_list = [t.strip() for t in tags.split(",") if t.strip()]
             for t in tag_list:
-                conditions.append(Post.tags.contains([t]))
+                # JSON 배열을 텍스트로 캐스팅 후, 따옴표로 감싼 태그를 검색
+                # 예: ["python", "fastapi"] 에서 '"python"' 매칭
+                # 따옴표 덕분에 "java"가 "javascript"에 매칭되는 부분일치 방지
+                conditions.append(cast(Post.tags, String).like(f'%"{t}"%'))
         
         if search:
             search_pattern = f"%{search}%"
