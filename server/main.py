@@ -6,9 +6,13 @@ FastAPI 기반 블로그 서버
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from pathlib import Path
 import os
 import uvicorn
@@ -22,6 +26,9 @@ from services.image_cleanup import start_cleanup_scheduler
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
+
+# Rate Limiter 설정 (클라이언트 IP 기반)
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 
 @asynccontextmanager
@@ -51,6 +58,10 @@ app = FastAPI(
     openapi_url=None if IS_PRODUCTION else "/openapi.json",
     lifespan=lifespan,
 )
+
+# Rate Limiter 등록
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS 설정 (환경 변수로 오리진 관리)
 cors_origins = os.getenv(

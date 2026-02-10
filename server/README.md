@@ -7,8 +7,10 @@ FastAPI 기반 블로그 백엔드 서버
 - JWT 기반 인증 (로그인/회원가입)
 - 블로그 포스트 CRUD (생성/조회/수정/삭제, 임시저장/발행)
 - 이미지 업로드 및 게시글 연결 관리
+- 이미지 자동 리사이징/최적화 (Pillow 기반, 최대 1920px, 포맷별 압축)
 - Orphan 이미지 자동 정리 (백그라운드 스케줄러)
 - 관리용 이미지 현황 조회 및 수동 정리 API
+- Rate limiting (slowapi 기반, 엔드포인트별 요청 속도 제한)
 - 프로덕션 환경에서 API 문서 자동 비활성화
 - Alembic 기반 DB 마이그레이션
 - CORS 설정 / 정적 파일 서빙
@@ -136,6 +138,21 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ## 이미지 관리
 
+### 이미지 리사이징/최적화
+
+이미지 업로드 시 자동으로 최적화가 적용됩니다:
+
+| 항목 | 내용 |
+|------|------|
+| 최대 크기 | 1920px (긴 변 기준, 비율 유지 리사이징) |
+| JPEG 압축 | 품질 85, optimize 활성화 |
+| WebP 압축 | 품질 80, method 6 (최고 압축) |
+| PNG | optimize 활성화 |
+| GIF | 애니메이션 GIF는 원본 유지, 단일 프레임은 최적화 |
+| EXIF | 회전 정보 자동 보정 (exif_transpose) |
+
+- 설정값은 `routers/image.py` 상단 상수에서 변경 가능
+
 ### 이미지-게시글 연결
 
 이미지는 DB의 `images` 테이블에서 `post_id` 외래키로 게시글과 연결됩니다. 게시글 생성/수정 시 마크다운 본문을 분석하여 자동으로 연결을 관리합니다:
@@ -154,6 +171,23 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 - 정리 주기: 1시간 간격
 - 설정값은 `services/image_cleanup.py`에서 변경 가능
+
+## Rate Limiting
+
+`slowapi` 기반 IP별 요청 속도 제한이 적용됩니다:
+
+| 엔드포인트 | 제한 | 설명 |
+|------------|------|------|
+| `POST /api/auth/login` | 5회/분 | 브루트포스 방지 |
+| `POST /api/upload/image` | 30회/분 | 이미지 업로드 남용 방지 |
+| `POST /api/posts` | 20회/분 | 게시글 생성 |
+| `PUT /api/posts/{id}` | 20회/분 | 게시글 수정 |
+| `DELETE /api/posts/{id}` | 20회/분 | 게시글 삭제 |
+| `POST /api/posts/{id}/view` | 30회/분 | 조회수 증가 |
+| 기타 엔드포인트 | 60회/분 | 기본 제한 |
+
+- 제한 초과 시 `429 Too Many Requests` 응답 반환
+- 응답 헤더에 `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` 포함
 
 ## 환경 변수
 
@@ -192,7 +226,7 @@ ruff format .
 
 ## TODO
 
-- [ ] 이미지 리사이징/최적화
+- [x] 이미지 리사이징/최적화
 - [ ] CDN 연동
-- [ ] Rate limiting
+- [x] Rate limiting
 - [ ] 테스트 코드 작성

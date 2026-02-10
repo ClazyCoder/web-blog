@@ -2,10 +2,12 @@
 게시글 라우터 - CRUD API
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import selectinload
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from typing import Optional, List
 import re
 from datetime import datetime
@@ -15,6 +17,8 @@ from models.post import Post
 from models.image import Image
 from auth import get_current_user
 from schemas.post import PostCreate, PostUpdate, PostResponse, PaginatedPostResponse
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(
     prefix="/api/posts",
@@ -110,7 +114,9 @@ def generate_slug(title: str, post_id: Optional[int] = None) -> str:
 # ==================== CRUD API 엔드포인트 ====================
 
 @router.post("/{post_id}/view", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 async def increment_view_count(
+    request: Request,
     post_id: int,
     db: AsyncSession = Depends(get_db)
 ):
@@ -137,7 +143,9 @@ async def increment_view_count(
 
 
 @router.post("", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 async def create_post(
+    request: Request,
     post_data: PostCreate,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -364,7 +372,9 @@ async def get_post(
 
 
 @router.put("/{post_id}", response_model=PostResponse)
+@limiter.limit("20/minute")
 async def update_post(
+    request: Request,
     post_id: int,
     post_data: PostUpdate,
     current_user: dict = Depends(get_current_user),
@@ -430,7 +440,9 @@ async def update_post(
 
 
 @router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("20/minute")
 async def delete_post(
+    request: Request,
     post_id: int,
     permanent: bool = Query(False, description="영구 삭제 여부"),
     current_user: dict = Depends(get_current_user),

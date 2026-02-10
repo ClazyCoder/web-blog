@@ -2,19 +2,27 @@
 이미지 업로드 라우터 (개선 버전)
 """
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from pathlib import Path
 import uuid
 from datetime import datetime
 import re
-from PIL import Image as PILImage
+import io
+import logging
+from PIL import Image as PILImage, ImageOps
 import os
 from auth import get_current_user
 from db.session import get_db
 from models.image import Image
 from services.image_cleanup import run_cleanup, ORPHAN_TTL_HOURS, SOFT_DELETE_TTL_DAYS
+
+logger = logging.getLogger(__name__)
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(
     prefix="/api/upload",
@@ -30,6 +38,11 @@ ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 # 최대 파일 크기 (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024
+
+# 이미지 최적화 설정
+MAX_IMAGE_DIMENSION = 1920  # 최대 너비/높이 (픽셀)
+JPEG_QUALITY = 85           # JPEG 압축 품질
+WEBP_QUALITY = 80           # WebP 압축 품질
 
 
 def validate_image(file: UploadFile) -> bool:
@@ -88,8 +101,84 @@ def generate_unique_filename(original_filename: str) -> str:
     return f"{timestamp}_{unique_id}{file_ext}"
 
 
+def optimize_image(file_path: Path) -> tuple[int, int | None, int | None]:
+    """
+    이미지 리사이징 및 최적화
+
+    - EXIF orientation 자동 보정
+    - 최대 크기(1920px) 초과 시 비율 유지하며 리사이징
+    - 포맷별 품질 최적화 (JPEG/WebP 압축, PNG 최적화)
+    - GIF 애니메이션은 리사이징 없이 원본 유지
+
+    Args:
+        file_path: 저장된 이미지 파일 경로
+
+    Returns:
+        (optimized_file_size, width, height)
+    """
+    try:
+        with PILImage.open(file_path) as img:
+            original_format = (img.format or "JPEG").upper()
+
+            # GIF 애니메이션은 최적화 건너뜀 (프레임 보존)
+            if original_format == "GIF" and getattr(img, "n_frames", 1) > 1:
+                width, height = img.size
+                return file_path.stat().st_size, width, height
+
+            # EXIF orientation 자동 보정 (회전된 사진 처리)
+            img = ImageOps.exif_transpose(img)
+
+            # 리사이징 (최대 크기 초과 시 비율 유지)
+            width, height = img.size
+            if width > MAX_IMAGE_DIMENSION or height > MAX_IMAGE_DIMENSION:
+                img.thumbnail(
+                    (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION),
+                    PILImage.LANCZOS,
+                )
+                width, height = img.size
+                logger.info(
+                    f"Image resized: {file_path.name} -> {width}x{height}"
+                )
+
+            # 포맷별 최적화 옵션
+            save_kwargs: dict = {}
+            if original_format in ("JPEG", "JPG"):
+                # RGBA/P 모드 -> RGB 변환 (JPEG는 투명도 미지원)
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                save_kwargs = {"quality": JPEG_QUALITY, "optimize": True}
+            elif original_format == "PNG":
+                save_kwargs = {"optimize": True}
+            elif original_format == "WEBP":
+                save_kwargs = {"quality": WEBP_QUALITY, "method": 6}
+            elif original_format == "GIF":
+                # 단일 프레임 GIF
+                save_kwargs = {"optimize": True}
+
+            # 최적화된 이미지 저장 (원본 덮어쓰기)
+            img.save(file_path, format=original_format, **save_kwargs)
+
+        optimized_size = file_path.stat().st_size
+        logger.info(
+            f"Image optimized: {file_path.name} ({optimized_size} bytes, {width}x{height})"
+        )
+        return optimized_size, width, height
+
+    except Exception as e:
+        logger.warning(f"Image optimization failed for {file_path.name}: {e}")
+        # 최적화 실패 시 원본 유지, 크기 정보만 시도
+        try:
+            with PILImage.open(file_path) as img:
+                w, h = img.size
+            return file_path.stat().st_size, w, h
+        except Exception:
+            return file_path.stat().st_size, None, None
+
+
 @router.post("/image")
+@limiter.limit("30/minute")
 async def upload_image(
+    request: Request,
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -140,19 +229,14 @@ async def upload_image(
         storage_key = f"images/{unique_filename}"  # 스토리지 키
         file_path = UPLOAD_DIR / unique_filename
 
-        # 파일 저장
+        # 파일 저장 (원본)
         with open(file_path, "wb") as buffer:
             buffer.write(content)
 
-        # 이미지 크기 정보 추출
-        width, height = None, None
-        try:
-            with PILImage.open(file_path) as img:
-                width, height = img.size
-        except Exception:
-            pass  # 이미지 크기 추출 실패해도 업로드는 계속
+        # 이미지 리사이징 및 최적화
+        file_size, width, height = optimize_image(file_path)
 
-        # DB에 이미지 정보 저장 (개선 버전)
+        # DB에 이미지 정보 저장 (최적화된 크기 반영)
         new_image = Image(
             storage_key=storage_key,  # 실제 저장 경로
             original_filename=file.filename or "image.jpg",

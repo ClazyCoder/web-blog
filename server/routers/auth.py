@@ -2,8 +2,10 @@
 인증 관련 라우터
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends, Response
+from fastapi import APIRouter, HTTPException, status, Depends, Response, Request
 from datetime import timedelta
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from auth import (
     create_access_token, 
     verify_admin_credentials,
@@ -13,6 +15,8 @@ from auth import (
 )
 from schemas.auth import UserLogin, UserInfo
 
+limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(
     prefix="/api/auth",
     tags=["auth"]
@@ -20,7 +24,8 @@ router = APIRouter(
 
 
 @router.post("/login")
-async def login(user_data: UserLogin, response: Response):
+@limiter.limit("5/minute")
+async def login(request: Request, user_data: UserLogin, response: Response):
     """
     사용자 로그인 (환경변수 기반 단일 사용자)
     
