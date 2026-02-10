@@ -68,6 +68,13 @@ const Header: React.FC = () => {
                             Others
                         </NavLink>
 
+                        {/* 어드민 (로그인 시에만 표시) */}
+                        {isAuthenticated && (
+                            <NavLink to="/admin" onClick={handleNavClick} className={navLinkClass}>
+                                Admin
+                            </NavLink>
+                        )}
+
                         {/* 로그인/사용자 메뉴 (데스크톱) */}
                         <div className="relative ml-4">
                             {isAuthenticated ? (
@@ -160,6 +167,13 @@ const Header: React.FC = () => {
                             <NavLink to="/others" onClick={handleNavClick} className={mobileNavLinkClass}>
                                 Others
                             </NavLink>
+
+                            {/* 어드민 (로그인 시에만 표시) */}
+                            {isAuthenticated && (
+                                <NavLink to="/admin" onClick={handleNavClick} className={mobileNavLinkClass}>
+                                    Admin
+                                </NavLink>
+                            )}
 
                             {/* 구분선 */}
                             <div className="border-t border-emerald-800 my-2"></div>

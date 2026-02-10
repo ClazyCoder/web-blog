@@ -82,7 +82,8 @@ web-blog/
 | 백그라운드 스케줄러 | asyncio 기반 주기적 실행 (1시간 간격) |
 | 임시 이미지 정리 | 업로드 후 게시글에 미연결 상태로 24시간 경과 시 자동 삭제 |
 | Soft-delete 영구 삭제 | 소프트 삭제 후 7일 경과 시 파일 + DB 레코드 영구 삭제 |
-| 관리 API | Orphan 현황 조회 및 수동 정리 실행 엔드포인트 제공 |
+| 관리 API | Orphan 현황 조회, 목록 조회 및 수동 정리 실행 엔드포인트 제공 |
+| 관리자 페이지 | 고아 이미지 통계, 목록 확인, 개별 삭제 및 일괄 정리 UI (로그인 시 Header에 Admin 링크 표시) |
 
 ### 인증 시스템
 
@@ -175,6 +176,7 @@ web-blog/
 | Method | Path | 설명 | 인증 |
 |--------|------|------|------|
 | `GET` | `/api/upload/admin/orphans` | Orphan 이미지 현황 조회 | 필요 |
+| `GET` | `/api/upload/admin/orphans/list` | Orphan 이미지 목록 조회 | 필요 |
 | `POST` | `/api/upload/admin/cleanup` | Orphan 이미지 수동 정리 실행 | 필요 |
 
 ### 기타
@@ -415,6 +417,7 @@ pytest
 | `/board/:id` | Post Detail | 포스트 상세 (마크다운 렌더링, 조회수) |
 | `/editor` | Editor | 새 포스트 작성 (인증 필요) |
 | `/editor/:id` | Editor | 포스트 수정 (인증 필요) |
+| `/admin` | Admin | 관리자 페이지 (인증 필요, 고아 이미지 관리) |
 | `/login` | Login | 로그인 페이지 |
 | `/unauthorized` | Unauthorized | 접근 거부 페이지 |
 

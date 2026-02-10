@@ -337,6 +337,37 @@ async def get_orphan_stats(
     }
 
 
+@router.get("/admin/orphans/list")
+async def get_orphan_list(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    고아 이미지 목록 조회 (인증 필요)
+    
+    Returns:
+        고아 이미지 리스트 (is_temporary=True, post_id=None, deleted_at=None)
+    """
+    import os
+
+    stmt = select(Image).where(
+        and_(
+            Image.is_temporary.is_(True),
+            Image.post_id.is_(None),
+            Image.deleted_at.is_(None),
+        )
+    ).order_by(Image.created_at.desc())
+
+    result = await db.execute(stmt)
+    orphans = result.scalars().all()
+
+    base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    return {
+        "total": len(orphans),
+        "images": [img.to_dict(base_url) for img in orphans],
+    }
+
+
 @router.post("/admin/cleanup")
 async def trigger_cleanup(
     current_user: dict = Depends(get_current_user),
