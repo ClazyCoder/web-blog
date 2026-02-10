@@ -219,7 +219,7 @@ async def get_posts(
     skip: int = Query(0, ge=0, description="건너뛸 개수"),
     limit: int = Query(20, ge=1, le=100, description="가져올 개수"),
     category_slug: Optional[str] = Query(None, description="카테고리 필터"),
-    tag: Optional[str] = Query(None, description="태그 필터"),
+    tags: Optional[str] = Query(None, description="태그 필터 (쉼표 구분, 예: python,fastapi)"),
     search: Optional[str] = Query(None, description="검색어 (제목, 내용)"),
     post_status: Optional[str] = Query(None, alias="status", description="상태 필터: draft, published"),
     db: AsyncSession = Depends(get_db)
@@ -231,7 +231,7 @@ async def get_posts(
         skip: 건너뛸 개수 (오프셋)
         limit: 가져올 개수 (최대 100)
         category_slug: 카테고리 필터
-        tag: 태그 필터 (하나의 태그)
+        tags: 태그 필터 (쉼표 구분, 복수 태그 AND 조건)
         search: 검색어
         post_status: 상태 필터
         db: 비동기 데이터베이스 세션
@@ -249,8 +249,10 @@ async def get_posts(
         if category_slug:
             conditions.append(Post.category_slug == category_slug)
         
-        if tag:
-            conditions.append(Post.tags.contains([tag]))
+        if tags:
+            tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+            for t in tag_list:
+                conditions.append(Post.tags.contains([t]))
         
         if search:
             search_pattern = f"%{search}%"
@@ -293,6 +295,39 @@ async def get_posts(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"게시글 목록 조회 실패: {str(e)}"
+        )
+
+
+@router.get("/tags")
+async def get_all_tags(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    모든 published 게시글의 고유 태그 목록 반환 (정렬됨)
+    
+    Returns:
+        { "tags": ["fastapi", "python", "react", ...] }
+    """
+    try:
+        stmt = select(Post.tags).where(
+            Post.deleted_at.is_(None),
+            Post.status == "published",
+            Post.tags.isnot(None),
+        )
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+        
+        tag_set: set[str] = set()
+        for tags in rows:
+            if isinstance(tags, list):
+                tag_set.update(tags)
+        
+        return {"tags": sorted(tag_set)}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"태그 목록 조회 실패: {str(e)}"
         )
 
 
