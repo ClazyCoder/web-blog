@@ -14,8 +14,13 @@ RUN npm ci
 # 소스 코드 복사
 COPY . .
 
-# 빌드 시 API URL을 빈 문자열로 설정 (nginx 프록시 사용)
+# 빌드 시 환경변수 설정
 ENV VITE_API_URL=""
+
+ARG VITE_SITE_NAME="YSG Blog"
+ARG VITE_ADMIN_EMAIL="admin@example.com"
+ENV VITE_SITE_NAME=$VITE_SITE_NAME
+ENV VITE_ADMIN_EMAIL=$VITE_ADMIN_EMAIL
 
 # 프로덕션 빌드
 RUN npm run build
