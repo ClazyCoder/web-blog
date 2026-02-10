@@ -29,7 +29,7 @@ const NotFound: React.FC = () => {
             <p className="text-xl text-gray-600 mb-8">페이지를 찾을 수 없습니다</p>
             <a
                 href="/"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded transition-colors"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-6 rounded transition-colors"
             >
                 홈으로 돌아가기
             </a>

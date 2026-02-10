@@ -69,7 +69,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
                             {uploadedImages.map((image, index) => (
                                 <div
                                     key={index}
-                                    className="group bg-gray-50 dark:bg-gray-700 rounded-lg overflow-hidden hover:shadow-md transition-all duration-200 border-2 border-transparent hover:border-blue-500 relative"
+                                    className="group bg-gray-50 dark:bg-gray-700 rounded-lg overflow-hidden hover:shadow-md transition-all duration-200 border-2 border-transparent hover:border-emerald-500 relative"
                                 >
                                     {/* 삭제 버튼 */}
                                     <button
@@ -118,7 +118,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
                                             })}
                                         </p>
                                         <div className="mt-2 flex items-center gap-2">
-                                            <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
+                                            <span className="text-xs bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded">
                                                 클릭하여 삽입
                                             </span>
                                         </div>

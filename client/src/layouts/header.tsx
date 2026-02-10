@@ -23,7 +23,7 @@ const Header: React.FC = () => {
     };
 
     return (
-        <header className="bg-gray-800 shadow-md">
+        <header className="bg-emerald-900 shadow-md">
             <div className="container mx-auto px-4">
                 <nav className="flex items-center justify-between h-16">
                     {/* 브랜드 */}
@@ -83,7 +83,7 @@ const Header: React.FC = () => {
                                         onClick={() => setShowUserMenu(!showUserMenu)}
                                         className="flex items-center gap-2 text-white hover:text-gray-300 transition-colors"
                                     >
-                                        <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                                        <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center">
                                             <span className="text-sm font-semibold">
                                                 {user?.username.charAt(0).toUpperCase()}
                                             </span>
@@ -121,8 +121,8 @@ const Header: React.FC = () => {
                                     onClick={handleNavClick}
                                     className={({ isActive }) =>
                                         `px-4 py-2 rounded transition-colors duration-200 ${isActive
-                                            ? 'bg-blue-700 text-white'
-                                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                                            ? 'bg-emerald-700 text-white'
+                                            : 'bg-emerald-600 text-white hover:bg-emerald-700'
                                         }`
                                     }
                                 >

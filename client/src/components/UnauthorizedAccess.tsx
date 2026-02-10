@@ -53,7 +53,7 @@ const UnauthorizedAccess: React.FC<UnauthorizedAccessProps> = ({
                     <div className="flex flex-col gap-3">
                         <button
                             onClick={handleLoginClick}
-                            className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                            className="w-full px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors"
                         >
                             로그인하기
                         </button>

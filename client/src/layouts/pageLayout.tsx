@@ -110,7 +110,7 @@ const PageLayout: React.FC = () => {
         return (
             <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
                     <p className="text-gray-600 dark:text-gray-400">로딩 중...</p>
                 </div>
             </div>
@@ -123,7 +123,7 @@ const PageLayout: React.FC = () => {
                 <div className="text-xl text-gray-700 dark:text-gray-300 mb-4">{error || '페이지를 찾을 수 없습니다.'}</div>
                 <button
                     onClick={() => navigate('/board')}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
                 >
                     게시판으로 돌아가기
                 </button>
@@ -153,7 +153,7 @@ const PageLayout: React.FC = () => {
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={handleEdit}
-                                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+                                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-lg transition-colors"
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -180,7 +180,7 @@ const PageLayout: React.FC = () => {
                             {pageData.tags.map(tag => (
                                 <span
                                     key={tag}
-                                    className="text-sm px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full"
+                                    className="text-sm px-3 py-1 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded-full"
                                 >
                                     {tag}
                                 </span>
@@ -224,7 +224,7 @@ const PageLayout: React.FC = () => {
                                 return (
                                     <a
                                         href={isSafeUrl ? href : '#'}
-                                        className="text-blue-600 dark:text-blue-400 hover:underline no-underline"
+                                        className="text-emerald-600 dark:text-emerald-400 hover:underline no-underline"
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         onClick={!isSafeUrl ? (e) => e.preventDefault() : undefined}
@@ -308,7 +308,7 @@ const PageLayout: React.FC = () => {
                 <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
                     <button
                         onClick={() => navigate('/board')}
-                        className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

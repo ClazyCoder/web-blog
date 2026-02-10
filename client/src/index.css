@@ -37,11 +37,11 @@ code {
   }
 
   .markdown-content a {
-    color: #60a5fa;
+    color: #34d399;
   }
 
   .markdown-content a:hover {
-    color: #93c5fd;
+    color: #6ee7b7;
   }
 
   .markdown-content strong {
@@ -110,7 +110,7 @@ code {
   .markdown-content .hljs-title,
   .markdown-content .hljs-section,
   .markdown-content .hljs-selector-id {
-    color: #60a5fa !important;
+    color: #34d399 !important;
   }
 
   .markdown-content .hljs-type,

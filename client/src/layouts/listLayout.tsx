@@ -142,7 +142,7 @@ const ListLayout: React.FC = () => {
                         {isAuthenticated && (
                             <button
                                 onClick={handleWriteClick}
-                                className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors shadow-md"
+                                className="flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors shadow-md"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -161,7 +161,7 @@ const ListLayout: React.FC = () => {
                                 value={searchTerm}
                                 onChange={(e) => handleSearchChange(e.target.value)}
                                 placeholder="검색어를 입력하세요..."
-                                className="w-full px-4 py-2.5 pl-10 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                className="w-full px-4 py-2.5 pl-10 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
                             />
                             <svg 
                                 className="absolute left-3 top-3 w-5 h-5 text-gray-400"
@@ -177,7 +177,7 @@ const ListLayout: React.FC = () => {
                         <select
                             value={selectedTag}
                             onChange={(e) => handleTagChange(e.target.value)}
-                            className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                            className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
                         >
                             <option value="all">모든 태그</option>
                             {allTags.map(tag => (
@@ -225,14 +225,14 @@ const ListLayout: React.FC = () => {
                                     {/* 데스크톱 레이아웃 */}
                                     <div className="hidden md:grid md:grid-cols-12 gap-4 items-center">
                                         <div className="col-span-7">
-                                            <h3 className="font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 line-clamp-1">
+                                            <h3 className="font-medium text-gray-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 line-clamp-1">
                                                 {post.title}
                                             </h3>
                                             <div className="flex gap-2 mt-1">
                                                 {post.tags.map(tag => (
                                                     <span
                                                         key={tag}
-                                                        className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded"
+                                                        className="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded"
                                                     >
                                                         {tag}
                                                     </span>
@@ -256,7 +256,7 @@ const ListLayout: React.FC = () => {
                                             {post.tags.map(tag => (
                                                 <span
                                                     key={tag}
-                                                    className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded"
+                                                    className="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded"
                                                 >
                                                     {tag}
                                                 </span>
@@ -297,7 +297,7 @@ const ListLayout: React.FC = () => {
                                     onClick={() => setCurrentPage(page)}
                                     className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${
                                         currentPage === page
-                                            ? 'bg-blue-600 text-white shadow-md'
+                                            ? 'bg-emerald-600 text-white shadow-md'
                                             : 'text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                                     }`}
                                 >

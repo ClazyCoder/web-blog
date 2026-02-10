@@ -638,7 +638,7 @@ const EditorLayout: React.FC = () => {
         return (
             <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 dark:bg-gray-900">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
                     <p className="text-gray-600 dark:text-gray-400">게시글 불러오는 중...</p>
                 </div>
             </div>
@@ -650,7 +650,7 @@ const EditorLayout: React.FC = () => {
         return (
             <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 dark:bg-gray-900">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
                     <p className="text-gray-600 dark:text-gray-400">로딩 중...</p>
                 </div>
             </div>
@@ -750,7 +750,7 @@ const EditorLayout: React.FC = () => {
                                 <button
                                     onClick={handleSave}
                                     disabled={isSaving || isDraftSaving}
-                                    className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded transition-colors"
+                                    className="px-6 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 rounded transition-colors"
                                 >
                                     {isSaving ? '저장 중...' : '저장'}
                                 </button>
@@ -767,7 +767,7 @@ const EditorLayout: React.FC = () => {
                                     <button
                                         onClick={handleSave}
                                         disabled={isSaving || isDraftSaving}
-                                        className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded transition-colors"
+                                        className="px-6 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 rounded transition-colors"
                                     >
                                         {isSaving ? '발행 중...' : '발행'}
                                     </button>
@@ -842,18 +842,18 @@ const EditorLayout: React.FC = () => {
 
                 {/* 업로드 진행 표시 */}
                 {uploadProgress && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 px-4 py-2">
+                    <div className="bg-emerald-50 dark:bg-emerald-900/20 border-b border-emerald-200 dark:border-emerald-800 px-4 py-2">
                         <div className="flex items-center justify-between text-sm">
-                            <span className="text-blue-700 dark:text-blue-300">
+                            <span className="text-emerald-700 dark:text-emerald-300">
                                 📤 {uploadProgress.fileName} 업로드 중...
                             </span>
-                            <span className="text-blue-600 dark:text-blue-400 font-semibold">
+                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
                                 {uploadProgress.progress}%
                             </span>
                         </div>
                         <div className="mt-1 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
                             <div
-                                className="bg-blue-600 dark:bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                                className="bg-emerald-600 dark:bg-emerald-500 h-1.5 rounded-full transition-all duration-300"
                                 style={{ width: `${uploadProgress.progress}%` }}
                             ></div>
                         </div>
@@ -875,9 +875,9 @@ const EditorLayout: React.FC = () => {
                         onDrop={handleDrop}
                     >
                         {isDragging && (
-                            <div className="absolute inset-0 bg-blue-500/10 border-4 border-dashed border-blue-500 dark:border-blue-400 z-10 flex items-center justify-center pointer-events-none">
+                            <div className="absolute inset-0 bg-emerald-500/10 border-4 border-dashed border-emerald-500 dark:border-emerald-400 z-10 flex items-center justify-center pointer-events-none">
                                 <div className="bg-white dark:bg-gray-800 px-6 py-4 rounded-lg shadow-lg">
-                                    <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                                    <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
                                         📷 이미지를 여기에 드롭하세요
                                     </p>
                                 </div>
@@ -897,11 +897,11 @@ const EditorLayout: React.FC = () => {
                     {/* 드래그 가능한 경계선 (데스크탑 전용) */}
                     {showPreview && (
                         <div
-                            className="hidden lg:block w-1 bg-gray-300 dark:bg-gray-600 hover:bg-blue-500 dark:hover:bg-blue-500 cursor-col-resize transition-colors relative group"
+                            className="hidden lg:block w-1 bg-gray-300 dark:bg-gray-600 hover:bg-emerald-500 dark:hover:bg-emerald-500 cursor-col-resize transition-colors relative group"
                             onMouseDown={() => setIsResizing(true)}
                         >
-                            <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-blue-500/20"></div>
-                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1 h-12 bg-gray-400 dark:bg-gray-500 rounded-full group-hover:bg-blue-500 transition-colors"></div>
+                            <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-emerald-500/20"></div>
+                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1 h-12 bg-gray-400 dark:bg-gray-500 rounded-full group-hover:bg-emerald-500 transition-colors"></div>
                         </div>
                     )}
 
@@ -951,7 +951,7 @@ const EditorLayout: React.FC = () => {
                                             return (
                                                 <a
                                                     href={isSafeUrl ? href : '#'}
-                                                    className="text-blue-600 dark:text-blue-400 hover:underline no-underline"
+                                                    className="text-emerald-600 dark:text-emerald-400 hover:underline no-underline"
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     onClick={!isSafeUrl ? (e) => e.preventDefault() : undefined}
@@ -1051,7 +1051,7 @@ const EditorLayout: React.FC = () => {
                             onChange={(e) => setTagInput(e.target.value)}
                             onKeyPress={handleTagKeyPress}
                             placeholder="태그를 입력하고 Enter를 누르세요"
-                            className="flex-1 px-3 py-1.5 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-400"
+                            className="flex-1 px-3 py-1.5 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white placeholder-gray-400"
                         />
                         <button
                             onClick={handleAddTag}
@@ -1065,7 +1065,7 @@ const EditorLayout: React.FC = () => {
                             {editorData.tags.map((tag, index) => (
                                 <span
                                     key={index}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 text-sm bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded-full"
                                 >
                                     <span>{tag}</span>
                                     <button
@@ -1086,7 +1086,7 @@ const EditorLayout: React.FC = () => {
                 {/* 플로팅 버튼 - 업로드된 이미지 보기 */}
                 <button
                     onClick={() => setIsSidebarOpen(true)}
-                    className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center z-30"
+                    className="fixed bottom-8 right-8 w-14 h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center z-30"
                     title="업로드된 이미지 보기"
                 >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
