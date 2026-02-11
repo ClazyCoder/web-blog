@@ -5,8 +5,6 @@
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from pathlib import Path
 import uuid
 from datetime import datetime
@@ -19,10 +17,9 @@ from auth import get_current_user
 from db.session import get_db
 from models.image import Image
 from services.image_cleanup import run_cleanup, ORPHAN_TTL_HOURS, SOFT_DELETE_TTL_DAYS
+from rate_limit import limiter
 
 logger = logging.getLogger(__name__)
-
-limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(
     prefix="/api/upload",
@@ -457,10 +454,10 @@ async def trigger_cleanup(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    고아 이미지 정리 수동 실행 (인증 필요)
+    고아 이미지 강제 정리 수동 실행 (인증 필요)
     
     Returns:
         정리 결과 요약
     """
-    result = await run_cleanup()
+    result = await run_cleanup(use_lock=False, force_orphan_cleanup=True)
     return result

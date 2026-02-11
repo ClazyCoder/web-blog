@@ -8,12 +8,14 @@ from fastapi import Depends, HTTPException, status, Cookie
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 import bcrypt
+import uuid
 import os
 
 # 환경 변수에서 읽기
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 7  # 로그인 유지 시 리프레시 토큰 만료 (7일)
 
 # 환경변수에서 단일 사용자 정보 가져오기
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
@@ -128,10 +130,84 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "jti": str(uuid.uuid4())})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
     return encoded_jwt
+
+
+def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    JWT 리프레시 토큰 생성
+
+    Args:
+        data: 토큰에 포함할 데이터 (예: {"sub": user_id})
+        expires_delta: 만료 시간 (기본값: 7일)
+
+    Returns:
+        JWT 리프레시 토큰 문자열
+    """
+    to_encode = data.copy()
+
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
+    to_encode.update({"exp": expire, "jti": str(uuid.uuid4()), "type": "refresh"})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+    return encoded_jwt
+
+
+def decode_refresh_token(token: str) -> dict:
+    """
+    리프레시 토큰 디코딩 및 검증
+
+    Args:
+        token: JWT 리프레시 토큰 문자열
+
+    Returns:
+        토큰 페이로드 딕셔너리
+
+    Raises:
+        HTTPException: 토큰이 유효하지 않거나 리프레시 토큰이 아닌 경우
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+        # 리프레시 토큰인지 확인
+        if payload.get("type") != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type",
+            )
+
+        return payload
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+
+
+def decode_token_unsafe(token: str) -> Optional[dict]:
+    """
+    만료 여부와 무관하게 토큰 디코딩 (로그아웃 시 jti 추출용)
+
+    Args:
+        token: JWT 토큰 문자열
+
+    Returns:
+        토큰 페이로드 딕셔너리 (디코딩 실패 시 None)
+    """
+    try:
+        return jwt.decode(
+            token, SECRET_KEY, algorithms=[ALGORITHM],
+            options={"verify_exp": False}
+        )
+    except JWTError:
+        return None
 
 
 def decode_access_token(token: str) -> dict:
@@ -173,6 +249,8 @@ async def get_current_user_from_cookie(
     Raises:
         HTTPException: 인증 실패 시
     """
+    from db.redis import is_token_blacklisted
+
     if not access_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -187,6 +265,14 @@ async def get_current_user_from_cookie(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authentication credentials",
+            )
+
+        # 토큰 블랙리스트 확인 (로그아웃된 토큰 차단)
+        jti = payload.get("jti")
+        if jti and await is_token_blacklisted(jti):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
             )
 
         # 페이로드에서 추가 정보 추출

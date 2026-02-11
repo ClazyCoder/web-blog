@@ -10,8 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from pathlib import Path
 import os
@@ -24,16 +23,24 @@ import auth
 # 서비스 임포트
 from services.image_cleanup import start_cleanup_scheduler
 
+# Redis 임포트
+from db.redis import init_redis, close_redis
+
+# 공유 Rate Limiter
+from rate_limit import limiter
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
-
-# Rate Limiter 설정 (클라이언트 IP 기반)
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """앱 생명주기 관리 (startup / shutdown)"""
+    # Startup: Redis 연결
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url:
+        await init_redis(redis_url)
+
     # Startup: 백그라운드 태스크 시작
     cleanup_task = asyncio.create_task(start_cleanup_scheduler())
     yield
@@ -43,6 +50,8 @@ async def lifespan(app: FastAPI):
         await cleanup_task
     except asyncio.CancelledError:
         pass
+    # Shutdown: Redis 연결 종료
+    await close_redis()
 
 
 # 환경 판별 (production에서는 API 문서 비활성화)

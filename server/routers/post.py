@@ -6,19 +6,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import cast, desc, func, or_, select, String
 from sqlalchemy.orm import selectinload
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from typing import Optional, List
+import json
 import re
 from datetime import datetime
 
 from db.session import get_db
+from db.redis import cache_get, cache_set, cache_delete_pattern, check_and_set_view
 from models.post import Post
 from models.image import Image
 from auth import get_current_user
 from schemas.post import PostCreate, PostUpdate, PostResponse, PaginatedPostResponse
-
-limiter = Limiter(key_func=get_remote_address)
+from rate_limit import limiter
 
 router = APIRouter(
     prefix="/api/posts",
@@ -122,12 +121,19 @@ async def increment_view_count(
 ):
     """
     조회수 증가 (별도 엔드포인트)
-    GET 조회와 분리하여 React StrictMode 등에 의한 중복 호출 방지
+    Redis를 통해 같은 IP의 중복 조회를 1시간 동안 차단
     
     Args:
         post_id: 게시글 ID
         db: 비동기 데이터베이스 세션
     """
+    # IP 기반 중복 조회 방지 (1시간 TTL)
+    client_ip = request.client.host if request.client else "unknown"
+    is_new_view = await check_and_set_view(post_id, client_ip, ttl=3600)
+
+    if not is_new_view:
+        return  # 중복 조회: DB 업데이트 없이 204 반환
+
     stmt = select(Post).filter(Post.id == post_id, Post.deleted_at.is_(None))
     result = await db.execute(stmt)
     post = result.scalar_one_or_none()
@@ -189,6 +195,9 @@ async def create_post(
         await link_images_to_post(new_post.id, new_post.content, db)
         
         await db.commit()
+
+        # 캐시 무효화 (목록, 태그)
+        await cache_delete_pattern("cache:posts:*")
         
         # 연결된 첫 번째 이미지의 URL을 썸네일로 사용
         thumbnail_url = None
@@ -234,19 +243,17 @@ async def get_posts(
 ):
     """
     게시글 목록 조회 (페이지네이션 + 총 개수)
-    
-    Args:
-        skip: 건너뛸 개수 (오프셋)
-        limit: 가져올 개수 (최대 100)
-        category_slug: 카테고리 필터
-        tags: 태그 필터 (쉼표 구분, 복수 태그 AND 조건)
-        search: 검색어
-        post_status: 상태 필터
-        db: 비동기 데이터베이스 세션
-    
-    Returns:
-        페이지네이션 정보 포함 게시글 목록
+    검색어가 없는 경우 Redis 캐시 활용 (TTL 5분)
     """
+    # 검색어가 없으면 캐시 시도
+    use_cache = search is None
+    cache_key = ""
+    if use_cache:
+        cache_key = f"cache:posts:list:{post_status or 'all'}:{category_slug or 'none'}:{tags or 'none'}:{skip}:{limit}"
+        cached = await cache_get(cache_key)
+        if cached:
+            return PaginatedPostResponse(**json.loads(cached))
+
     try:
         # WHERE 조건 리스트
         conditions = [Post.deleted_at.is_(None)]
@@ -260,9 +267,6 @@ async def get_posts(
         if tags:
             tag_list = [t.strip() for t in tags.split(",") if t.strip()]
             for t in tag_list:
-                # JSON 배열을 텍스트로 캐스팅 후, 따옴표로 감싼 태그를 검색
-                # 예: ["python", "fastapi"] 에서 '"python"' 매칭
-                # 따옴표 덕분에 "java"가 "javascript"에 매칭되는 부분일치 방지
                 conditions.append(cast(Post.tags, String).like(f'%"{t}"%'))
         
         if search:
@@ -293,12 +297,18 @@ async def get_posts(
         
         items = [PostResponse(**post.to_dict(include_content=False)) for post in posts]
         
-        return PaginatedPostResponse(
+        response_data = PaginatedPostResponse(
             items=items,
             total=total,
             skip=skip,
             limit=limit
         )
+
+        # 캐시 저장 (검색어 없는 경우만, TTL 5분)
+        if use_cache:
+            await cache_set(cache_key, response_data.model_dump_json(), ttl=300)
+
+        return response_data
         
     except Exception as e:
         import traceback
@@ -315,10 +325,17 @@ async def get_all_tags(
 ):
     """
     모든 published 게시글의 고유 태그 목록 반환 (정렬됨)
+    Redis 캐시 활용 (TTL 10분)
     
     Returns:
         { "tags": ["fastapi", "python", "react", ...] }
     """
+    # 캐시 시도
+    cache_key = "cache:posts:tags"
+    cached = await cache_get(cache_key)
+    if cached:
+        return json.loads(cached)
+
     try:
         stmt = select(Post.tags).where(
             Post.deleted_at.is_(None),
@@ -333,7 +350,12 @@ async def get_all_tags(
             if isinstance(tags, list):
                 tag_set.update(tags)
         
-        return {"tags": sorted(tag_set)}
+        response_data = {"tags": sorted(tag_set)}
+
+        # 캐시 저장 (TTL 10분)
+        await cache_set(cache_key, json.dumps(response_data, ensure_ascii=False), ttl=600)
+
+        return response_data
         
     except Exception as e:
         raise HTTPException(
@@ -348,15 +370,14 @@ async def get_post(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    게시글 상세 조회
-    
-    Args:
-        post_id: 게시글 ID
-        db: 비동기 데이터베이스 세션
-    
-    Returns:
-        게시글 상세 정보
+    게시글 상세 조회 (Redis 캐시 활용, TTL 10분)
     """
+    # 캐시 시도
+    cache_key = f"cache:posts:detail:{post_id}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return PostResponse(**json.loads(cached))
+
     stmt = (
         select(Post)
         .options(selectinload(Post.images))
@@ -371,7 +392,13 @@ async def get_post(
             detail="게시글을 찾을 수 없습니다"
         )
     
-    return PostResponse(**post.to_dict())
+    response = PostResponse(**post.to_dict())
+
+    # published 게시글만 캐시 (draft는 자주 변경됨)
+    if post.status == "published":
+        await cache_set(cache_key, response.model_dump_json(), ttl=600)
+
+    return response
 
 
 @router.put("/{post_id}", response_model=PostResponse)
@@ -431,6 +458,9 @@ async def update_post(
         await db.commit()
         await db.refresh(post)  # 모든 scalar 속성 refresh
         await db.refresh(post, attribute_names=["images"])  # images 관계 refresh
+
+        # 캐시 무효화 (목록, 태그, 개별 게시글)
+        await cache_delete_pattern("cache:posts:*")
         
         return PostResponse(**post.to_dict())
         
@@ -460,7 +490,11 @@ async def delete_post(
         current_user: 현재 로그인한 사용자
         db: 비동기 데이터베이스 세션
     """
-    stmt = select(Post).filter(Post.id == post_id)
+    stmt = (
+        select(Post)
+        .options(selectinload(Post.images))
+        .filter(Post.id == post_id)
+    )
     result = await db.execute(stmt)
     post = result.scalar_one_or_none()
     
@@ -471,6 +505,12 @@ async def delete_post(
         )
     
     try:
+        # 연결된 이미지를 orphan으로 전환 (정리 서비스가 감지하도록)
+        for img in post.images:
+            if not img.deleted_at:
+                img.post_id = None
+                img.is_temporary = True
+
         if permanent:
             # 영구 삭제
             await db.delete(post)
@@ -479,6 +519,9 @@ async def delete_post(
             post.deleted_at = datetime.now()
         
         await db.commit()
+
+        # 캐시 무효화
+        await cache_delete_pattern("cache:posts:*")
         
     except Exception as e:
         await db.rollback()
@@ -494,15 +537,14 @@ async def get_post_by_slug(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    슬러그로 게시글 조회
-    
-    Args:
-        slug: URL 슬러그
-        db: 비동기 데이터베이스 세션
-    
-    Returns:
-        게시글 상세 정보
+    슬러그로 게시글 조회 (Redis 캐시 활용, TTL 10분)
     """
+    # 캐시 시도
+    cache_key = f"cache:posts:slug:{slug}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return PostResponse(**json.loads(cached))
+
     stmt = (
         select(Post)
         .options(selectinload(Post.images))
@@ -517,4 +559,9 @@ async def get_post_by_slug(
             detail="게시글을 찾을 수 없습니다"
         )
     
-    return PostResponse(**post.to_dict())
+    response = PostResponse(**post.to_dict())
+
+    if post.status == "published":
+        await cache_set(cache_key, response.model_dump_json(), ttl=600)
+
+    return response

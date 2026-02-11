@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 const Login: React.FC = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [rememberMe, setRememberMe] = useState(false);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
@@ -34,7 +35,7 @@ const Login: React.FC = () => {
         setIsLoading(true);
 
         try {
-            const success = await login(username, password);
+            const success = await login(username, password, rememberMe);
 
             if (success) {
                 // 로그인 성공 시 이전 페이지로 이동
@@ -107,6 +108,24 @@ const Login: React.FC = () => {
                                 disabled={isLoading}
                             />
                         </div>
+                    </div>
+
+                    <div className="flex items-center">
+                        <input
+                            id="remember-me"
+                            name="remember-me"
+                            type="checkbox"
+                            checked={rememberMe}
+                            onChange={(e) => setRememberMe(e.target.checked)}
+                            disabled={isLoading}
+                            className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 dark:border-gray-600 rounded cursor-pointer"
+                        />
+                        <label
+                            htmlFor="remember-me"
+                            className="ml-2 block text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none"
+                        >
+                            로그인 유지
+                        </label>
                     </div>
 
                     {error && (

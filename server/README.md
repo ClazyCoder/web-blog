@@ -9,7 +9,7 @@ FastAPI 기반 블로그 백엔드 서버
 - 이미지 업로드 및 게시글 연결 관리
 - 이미지 자동 리사이징/최적화 (Pillow 기반, 최대 1920px, 포맷별 압축)
 - Orphan 이미지 자동 정리 (백그라운드 스케줄러)
-- 관리용 이미지 현황 조회 및 수동 정리 API
+- 관리용 이미지 현황 조회 및 강제 정리 API (TTL 무시)
 - Rate limiting (slowapi 기반, 엔드포인트별 요청 속도 제한)
 - 프로덕션 환경에서 API 문서 자동 비활성화
 - Alembic 기반 DB 마이그레이션
@@ -127,7 +127,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 | GET | `/api/upload/temp/{filename}` | - | 임시 이미지 정보 조회 |
 | DELETE | `/api/upload/image/{filename}` | 필수 | 이미지 삭제 (soft-delete) |
 | GET | `/api/upload/admin/orphans` | 필수 | Orphan 이미지 현황 조회 |
-| POST | `/api/upload/admin/cleanup` | 필수 | Orphan 이미지 수동 정리 실행 |
+| POST | `/api/upload/admin/cleanup` | 필수 | Orphan 이미지 강제 정리 실행 (TTL 무시) |
 
 ### 시스템
 
@@ -159,6 +159,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 - 본문에 포함된 이미지 → `post_id` 설정, `is_temporary=False`
 - 본문에서 제거된 이미지 → `post_id=None`, `is_temporary=True`
+- 게시글 삭제(소프트/영구) 시 → 연결된 이미지를 `post_id=None`, `is_temporary=True`로 전환 (orphan화)
 
 ### Orphan 이미지 자동 정리
 
@@ -169,7 +170,8 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 | 임시 이미지 (orphan) | `is_temporary=True`, `post_id=NULL`, 생성 후 24시간 경과 | 파일 삭제 + soft-delete |
 | soft-delete된 이미지 | `deleted_at` 설정 후 7일 경과 | 파일 삭제 + DB 레코드 영구 삭제 |
 
-- 정리 주기: 1시간 간격
+- 정리 주기: 1시간 간격 (백그라운드 스케줄러)
+- 관리자 수동 실행: `POST /api/upload/admin/cleanup` — TTL 무시 강제 정리 (모든 orphan 이미지 즉시 정리)
 - 설정값은 `services/image_cleanup.py`에서 변경 가능
 
 ## Rate Limiting
