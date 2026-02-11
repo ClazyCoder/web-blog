@@ -5,10 +5,10 @@ export interface TocItem {
 }
 
 /**
- * 텍스트를 URL-safe slug로 변환
- * 한글, 영어, 숫자를 지원하며 중복 slug 처리를 위해 slugCount를 사용
+ * 헤딩 텍스트를 slug 기본 형태로 정규화
+ * 한글/영문/숫자를 지원하고 특수문자를 제거한다.
  */
-function generateSlug(text: string, slugCount: Map<string, number>): string {
+export function slugifyHeadingText(text: string): string {
     const base = text
         .toLowerCase()
         .trim()
@@ -17,7 +17,15 @@ function generateSlug(text: string, slugCount: Map<string, number>): string {
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '');
 
-    const slug = base || 'heading';
+    return base || 'heading';
+}
+
+/**
+ * 텍스트를 URL-safe slug로 변환
+ * 중복 slug 처리를 위해 slugCount를 사용
+ */
+export function generateSlug(text: string, slugCount: Map<string, number>): string {
+    const slug = slugifyHeadingText(text);
     const count = slugCount.get(slug) || 0;
     slugCount.set(slug, count + 1);
 
@@ -83,5 +91,5 @@ export function parseMarkdownHeadings(markdown: string): TocItem[] {
  */
 export function getHeadingSlug(text: string, allHeadings: TocItem[]): string {
     const item = allHeadings.find(h => h.text === text);
-    return item?.id || text.toLowerCase().replace(/\s+/g, '-');
+    return item?.id || slugifyHeadingText(text);
 }

@@ -18,11 +18,20 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({
     activeId,
     onItemClick,
 }) => {
+    const itemRefs = React.useRef<Map<string, HTMLAnchorElement | null>>(new Map());
+
+    React.useEffect(() => {
+        if (!activeId) return;
+        const activeElement = itemRefs.current.get(activeId);
+        activeElement?.scrollIntoView({ block: 'nearest' });
+    }, [activeId]);
+
     const handleClick = (e: React.MouseEvent, id: string) => {
         e.preventDefault();
         const element = document.getElementById(id);
         if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            history.replaceState(null, '', `#${id}`);
         }
         onItemClick?.(id);
     };
@@ -41,6 +50,9 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({
                         <li key={heading.id} className={levelIndent[heading.level] || 'pl-0'}>
                             <a
                                 href={`#${heading.id}`}
+                                ref={(el) => {
+                                    itemRefs.current.set(heading.id, el);
+                                }}
                                 onClick={(e) => handleClick(e, heading.id)}
                                 className={`
                                     block py-1.5 px-3 text-sm rounded-md transition-all duration-200

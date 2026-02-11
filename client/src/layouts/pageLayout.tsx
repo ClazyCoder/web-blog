@@ -6,7 +6,7 @@ import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
-import { parseMarkdownHeadings, extractTextFromChildren } from '../utils/tocParser';
+import { parseMarkdownHeadings, extractTextFromChildren, slugifyHeadingText } from '../utils/tocParser';
 import type { TocItem } from '../utils/tocParser';
 import TableOfContents from '../components/TableOfContents';
 
@@ -37,8 +37,16 @@ function findHeadingId(text: string, level: number, headings: TocItem[], usedIds
             return h.id;
         }
     }
-    // fallback
-    return text.toLowerCase().replace(/\s+/g, '-');
+    // fallback: TOC 파서와 동일한 slug 규칙 + 중복 방지
+    const baseSlug = slugifyHeadingText(text);
+    let nextSlug = baseSlug;
+    let suffix = 1;
+    while (usedIds.has(nextSlug)) {
+        nextSlug = `${baseSlug}-${suffix}`;
+        suffix += 1;
+    }
+    usedIds.add(nextSlug);
+    return nextSlug;
 }
 
 const PageLayout: React.FC = () => {
@@ -103,13 +111,13 @@ const PageLayout: React.FC = () => {
         return parseMarkdownHeadings(pageData.content);
     }, [pageData?.content]);
 
-    // heading ID 매칭용 ref (렌더링마다 리셋)
+    // heading ID 매칭용 ref
     const usedIdsRef = useRef<Set<string>>(new Set());
 
-    // ReactMarkdown 렌더링 전에 usedIds 초기화
-    const resetUsedIds = useCallback(() => {
+    // 콘텐츠/헤딩 변경 시 초기화 (렌더 중 mutation 방지)
+    useEffect(() => {
         usedIdsRef.current = new Set();
-    }, []);
+    }, [pageData?.content, headings]);
 
     // IntersectionObserver로 활성 헤딩 추적
     useEffect(() => {
@@ -120,20 +128,33 @@ const PageLayout: React.FC = () => {
                 headingElementsRef.current.set(entry.target.id, entry);
             });
 
-            // 현재 뷰포트 상단에 가장 가까운 보이는 헤딩을 찾기
-            const visibleHeadings: IntersectionObserverEntry[] = [];
+            // 단일 스캔으로 활성 헤딩 선택
+            let nearestTopNonNegativeId = '';
+            let nearestTopNonNegativeTop = Number.POSITIVE_INFINITY;
+            let largestNegativeTopId = '';
+            let largestNegativeTop = Number.NEGATIVE_INFINITY;
+
             headingElementsRef.current.forEach((entry) => {
-                if (entry.isIntersecting) {
-                    visibleHeadings.push(entry);
+                if (!entry.isIntersecting) return;
+
+                const top = entry.boundingClientRect.top;
+                if (top >= 0) {
+                    if (top < nearestTopNonNegativeTop) {
+                        nearestTopNonNegativeTop = top;
+                        nearestTopNonNegativeId = entry.target.id;
+                    }
+                    return;
+                }
+
+                if (top > largestNegativeTop) {
+                    largestNegativeTop = top;
+                    largestNegativeTopId = entry.target.id;
                 }
             });
 
-            if (visibleHeadings.length > 0) {
-                // 페이지 상단에 가장 가까운 것
-                const sorted = visibleHeadings.sort(
-                    (a, b) => a.boundingClientRect.top - b.boundingClientRect.top
-                );
-                setActiveHeadingId(sorted[0].target.id);
+            const nextActiveId = nearestTopNonNegativeId || largestNegativeTopId;
+            if (nextActiveId) {
+                setActiveHeadingId(nextActiveId);
             }
         };
 
@@ -142,16 +163,15 @@ const PageLayout: React.FC = () => {
             threshold: 0,
         });
 
-        // 약간의 지연 후 관찰 시작 (DOM 렌더링 대기)
-        const timer = setTimeout(() => {
+        const rafId = requestAnimationFrame(() => {
             headings.forEach((heading) => {
                 const el = document.getElementById(heading.id);
                 if (el) observer.observe(el);
             });
-        }, 100);
+        });
 
         return () => {
-            clearTimeout(timer);
+            cancelAnimationFrame(rafId);
             observer.disconnect();
             headingElementsRef.current.clear();
         };
@@ -218,9 +238,6 @@ const PageLayout: React.FC = () => {
             </div>
         );
     }
-
-    // 렌더링 전 usedIds 초기화
-    resetUsedIds();
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
