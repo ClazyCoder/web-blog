@@ -17,7 +17,7 @@ from models.post import Post
 from models.image import Image
 from auth import get_current_user
 from schemas.post import PostCreate, PostUpdate, PostResponse, PaginatedPostResponse
-from rate_limit import limiter
+from rate_limit import limiter, get_client_ip
 
 router = APIRouter(
     prefix="/api/posts",
@@ -128,7 +128,7 @@ async def increment_view_count(
         db: 비동기 데이터베이스 세션
     """
     # IP 기반 중복 조회 방지 (1시간 TTL)
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     is_new_view = await check_and_set_view(post_id, client_ip, ttl=3600)
 
     if not is_new_view:

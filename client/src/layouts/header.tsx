@@ -64,9 +64,6 @@ const Header: React.FC = () => {
                         <NavLink to="/board" onClick={handleNavClick} className={navLinkClass}>
                             Board
                         </NavLink>
-                        <NavLink to="/others" onClick={handleNavClick} className={navLinkClass}>
-                            Others
-                        </NavLink>
 
                         {/* 어드민 (로그인 시에만 표시) */}
                         {isAuthenticated && (
@@ -163,9 +160,6 @@ const Header: React.FC = () => {
                             </NavLink>
                             <NavLink to="/board" onClick={handleNavClick} className={mobileNavLinkClass}>
                                 Board
-                            </NavLink>
-                            <NavLink to="/others" onClick={handleNavClick} className={mobileNavLinkClass}>
-                                Others
                             </NavLink>
 
                             {/* 어드민 (로그인 시에만 표시) */}
