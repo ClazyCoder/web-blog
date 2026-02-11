@@ -19,6 +19,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.session import AsyncSessionLocal
+from db.redis import acquire_lock, release_lock
 from models.image import Image
 
 logger = logging.getLogger("image_cleanup")
@@ -124,45 +125,53 @@ async def purge_soft_deleted_images(db: AsyncSession) -> dict:
 
 async def run_cleanup() -> dict:
     """
-    전체 정리 작업 실행 (단일 실행용)
+    전체 정리 작업 실행 (분산 락으로 중복 실행 방지)
     
     Returns:
         정리 결과 요약
     """
-    async with AsyncSessionLocal() as db:
-        try:
-            orphan_result = await cleanup_orphan_images(db)
-            purge_result = await purge_soft_deleted_images(db)
-            
-            summary = {
-                "timestamp": datetime.now().isoformat(),
-                "orphan_cleanup": orphan_result,
-                "purge_soft_deleted": purge_result,
-            }
-            
-            # 작업이 있었을 때만 로그 출력
-            if orphan_result["deleted"] > 0 or purge_result["purged"] > 0:
-                logger.info(
-                    f"Image cleanup completed: "
-                    f"orphans={orphan_result['deleted']}, "
-                    f"purged={purge_result['purged']}"
-                )
-            
-            if orphan_result["errors"] or purge_result["errors"]:
-                logger.warning(
-                    f"Image cleanup errors: "
-                    f"orphan_errors={orphan_result['errors']}, "
-                    f"purge_errors={purge_result['errors']}"
-                )
-            
-            return summary
-            
-        except Exception as e:
-            logger.error(f"Image cleanup failed: {str(e)}")
-            return {
-                "timestamp": datetime.now().isoformat(),
-                "error": str(e),
-            }
+    # 분산 락 획득 시도 (TTL 10분 — 클린업 작업 최대 시간)
+    if not await acquire_lock("image_cleanup", ttl=600):
+        logger.info("Image cleanup skipped: another instance is running")
+        return {"timestamp": datetime.now().isoformat(), "skipped": True}
+
+    try:
+        async with AsyncSessionLocal() as db:
+            try:
+                orphan_result = await cleanup_orphan_images(db)
+                purge_result = await purge_soft_deleted_images(db)
+                
+                summary = {
+                    "timestamp": datetime.now().isoformat(),
+                    "orphan_cleanup": orphan_result,
+                    "purge_soft_deleted": purge_result,
+                }
+                
+                # 작업이 있었을 때만 로그 출력
+                if orphan_result["deleted"] > 0 or purge_result["purged"] > 0:
+                    logger.info(
+                        f"Image cleanup completed: "
+                        f"orphans={orphan_result['deleted']}, "
+                        f"purged={purge_result['purged']}"
+                    )
+                
+                if orphan_result["errors"] or purge_result["errors"]:
+                    logger.warning(
+                        f"Image cleanup errors: "
+                        f"orphan_errors={orphan_result['errors']}, "
+                        f"purge_errors={purge_result['errors']}"
+                    )
+                
+                return summary
+                
+            except Exception as e:
+                logger.error(f"Image cleanup failed: {str(e)}")
+                return {
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e),
+                }
+    finally:
+        await release_lock("image_cleanup")
 
 
 async def start_cleanup_scheduler():

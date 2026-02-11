@@ -211,6 +211,20 @@ const EditorLayout: React.FC = () => {
 
     const isEditingPublished = !!postId && originalStatus === 'published';
 
+    // 세션 만료(401) 시 편집 내용을 보존하면서 재로그인 안내
+    // (자동 토큰 갱신이 실패한 경우에만 이 함수가 호출됨)
+    const handleAuthExpired = () => {
+        const shouldLogin = window.confirm(
+            '로그인 세션이 완전히 만료되었습니다.\n현재 작성 중인 내용은 유지됩니다.\n\n새 탭에서 로그인 페이지를 여시겠습니까?'
+        );
+        if (shouldLogin) {
+            window.open(
+                `/login?redirect=${encodeURIComponent(window.location.pathname)}`,
+                '_blank'
+            );
+        }
+    };
+
     const savePost = async (action: 'draft' | 'published' | 'save') => {
         // action: 'draft' = 임시저장, 'published' = 발행, 'save' = 상태 유지 저장
         const isDraft = action === 'draft';
@@ -244,11 +258,11 @@ const EditorLayout: React.FC = () => {
 
             let response;
             if (postId) {
-                // 기존 게시글 수정 (PUT)
-                response = await api.put(`/api/posts/${postId}`, payload);
+                // 기존 게시글 수정 (PUT) — 401 시 하드 리다이렉트 방지
+                response = await api.put(`/api/posts/${postId}`, payload, { _skipAuthRedirect: true });
             } else {
-                // 새 게시글 생성 (POST)
-                response = await api.post('/api/posts', payload);
+                // 새 게시글 생성 (POST) — 401 시 하드 리다이렉트 방지
+                response = await api.post('/api/posts', payload, { _skipAuthRedirect: true });
                 const newId = response.data.id;
                 setPostId(newId);
                 // URL을 편집 모드로 변경 (뒤로가기 시 새 글 생성 방지)
@@ -268,6 +282,11 @@ const EditorLayout: React.FC = () => {
                 navigate(`/board/${response.data.id}`);
             }
         } catch (err: any) {
+            // 세션 만료(401): 편집 내용 보존, 재로그인 안내
+            if (err.response?.status === 401) {
+                handleAuthExpired();
+                return;
+            }
             const message = err.response?.data?.detail || '저장에 실패했습니다.';
             alert(message);
         } finally {
@@ -326,6 +345,7 @@ const EditorLayout: React.FC = () => {
 
             const response = await api.post('/api/upload/image', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
+                _skipAuthRedirect: true, // 401 시 하드 리다이렉트 방지
                 onUploadProgress: (progressEvent) => {
                     if (progressEvent.total) {
                         const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -356,6 +376,12 @@ const EditorLayout: React.FC = () => {
         } catch (error: any) {
             console.error('Image upload failed:', error);
             setUploadProgress(null);
+
+            // 세션 만료(401): 편집 내용 보존, 재로그인 안내
+            if (error.response?.status === 401) {
+                handleAuthExpired();
+                throw error;
+            }
 
             const errorMessage = error.response?.data?.detail
                 || (error instanceof Error ? error.message : '이미지 업로드에 실패했습니다.');

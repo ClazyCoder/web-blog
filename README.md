@@ -1,8 +1,8 @@
 # Web Blog
 
-모던 풀스택 블로그 플랫폼 — **React 19 + FastAPI**
+모던 풀스택 블로그 플랫폼 — **React 19 + FastAPI + Redis**
 
-마크다운 기반 에디터, 실시간 미리보기, 이미지 업로드, JWT 인증, 이미지 자동 정리 등을 지원하는 개인 블로그 시스템입니다.
+마크다운 기반 에디터, 실시간 미리보기, 이미지 업로드, JWT 인증 (리프레시 토큰 자동 갱신), Redis 캐싱, 이미지 자동 정리 등을 지원하는 개인 블로그 시스템입니다.
 
 ---
 
@@ -28,10 +28,11 @@ web-blog/
 │   ├── routers/              # API 라우터 (auth, post, image)
 │   ├── schemas/              # Pydantic 스키마 (요청/응답 검증)
 │   ├── services/             # 백그라운드 서비스 (이미지 정리 등)
-│   ├── db/                   # 데이터베이스 세션 관리
+│   ├── db/                   # 데이터베이스 세션 + Redis 연결 관리
 │   ├── blog/                 # Alembic 마이그레이션
 │   ├── main.py               # FastAPI 앱 진입점
-│   ├── auth.py               # JWT 인증 로직
+│   ├── auth.py               # JWT 인증 로직 (액세스 + 리프레시 토큰)
+│   ├── rate_limit.py         # 공유 Rate Limiter (Redis/인메모리)
 │   ├── Dockerfile            # Python + uv 기반 빌드
 │   ├── entrypoint.sh         # 마이그레이션 + 서버 시작
 │   └── pyproject.toml
@@ -59,7 +60,7 @@ web-blog/
 | 태그 시스템 | 포스트당 최대 10개 태그, 태그 기반 필터링, 전체 태그 목록 API |
 | 검색 | 제목/내용 전문 검색 (대소문자 무시) |
 | 페이지네이션 | 목록 페이지 단위 페이지 처리 |
-| 조회수 추적 | 별도 POST 엔드포인트로 분리 (React StrictMode 중복 호출 방지) |
+| 조회수 추적 | 별도 POST 엔드포인트, Redis 기반 IP 중복 조회 방지 (1시간 TTL) |
 | 슬러그 URL | 제목 기반 고유 슬러그 자동 생성 (ID 포함 중복 방지) |
 
 ### 이미지 관리
@@ -80,6 +81,7 @@ web-blog/
 | 기능 | 설명 |
 |------|------|
 | 백그라운드 스케줄러 | asyncio 기반 주기적 실행 (1시간 간격) |
+| 분산 락 | Redis SETNX 기반 — 멀티 워커 환경에서 중복 실행 방지 |
 | 임시 이미지 정리 | 업로드 후 게시글에 미연결 상태로 24시간 경과 시 자동 삭제 |
 | Soft-delete 영구 삭제 | 소프트 삭제 후 7일 경과 시 파일 + DB 레코드 영구 삭제 |
 | 관리 API | Orphan 현황 조회, 목록 조회 및 수동 정리 실행 엔드포인트 제공 |
@@ -89,10 +91,15 @@ web-blog/
 
 | 기능 | 설명 |
 |------|------|
-| JWT 인증 | HttpOnly 쿠키 기반 (Secure, SameSite=Lax) |
+| JWT 이중 토큰 | 액세스 토큰 (30분) + 리프레시 토큰 (7일) |
+| HttpOnly 쿠키 | Secure + SameSite=Lax, 리프레시 토큰은 `/api/auth` 경로 제한 |
+| 로그인 유지 | "로그인 유지" 체크박스 — 체크 시 리프레시 토큰 발급 |
+| 자동 토큰 갱신 | 액세스 토큰 만료 시 Axios 인터셉터가 자동으로 `/api/auth/refresh` 호출 후 원래 요청 재시도 |
+| 동시 요청 처리 | 여러 요청이 동시에 401을 받아도 하나의 refresh만 실행, 나머지는 대기 후 재시도 |
+| 토큰 블랙리스트 | 로그아웃/토큰 회전 시 Redis에 JTI 등록 (TTL = 토큰 남은 수명) |
+| Refresh Token Rotation | 리프레시 시 이전 토큰을 블랙리스트에 등록하여 재사용 차단 |
+| 에디터 세션 보호 | 토큰 갱신 실패 시에도 편집 내용 보존, 새 탭에서 재로그인 안내 |
 | 관리자 계정 | 환경 변수 기반 단일 관리자 설정 |
-| 자동 인증 확인 | 앱 로드 시 `/api/auth/me`로 세션 복원 |
-| 401 인터셉터 | 인증 만료 시 로그인 페이지로 자동 리다이렉트 |
 | Bearer 토큰 | 레거시 Authorization 헤더 지원 |
 
 ### UI/UX
@@ -103,8 +110,25 @@ web-blog/
 | 다크 모드 | 시스템 테마 자동 감지 (`prefers-color-scheme`) |
 | 반응형 에디터 | 모바일: 편집/미리보기 토글, 데스크톱: 분할 화면 + 리사이징 |
 | 미저장 변경 감지 | 에디터에서 이탈 시 확인 다이얼로그 (beforeunload + SPA 가드) |
+| 세션 만료 대응 | 에디터에서 세션 만료 시 작성 중 내용 보존 + 자동 토큰 갱신 시도 |
 | 로딩/에러 상태 | 모든 비동기 요청에 대한 상태 처리 |
 | XSS 방어 | 이미지/링크 URL 검증, HTML 태그 제거, 파일명 정제 |
+
+### Redis 활용
+
+| 기능 | Redis 키 패턴 | TTL | 설명 |
+|------|--------------|-----|------|
+| Rate Limiting | slowapi 내부 관리 | 자동 | 분산 환경에서 모든 워커가 동일한 카운터 공유 |
+| 토큰 블랙리스트 | `blacklist:{jti}` | 토큰 남은 수명 | 로그아웃/토큰 회전 시 즉시 무효화 |
+| 조회수 중복 방지 | `view:{post_id}:{ip}` | 1시간 | 같은 IP의 반복 조회 카운트 차단 |
+| 게시글 목록 캐싱 | `cache:posts:list:{params}` | 5분 | 검색어 없는 목록 요청 캐싱 |
+| 태그 목록 캐싱 | `cache:posts:tags` | 10분 | 전체 태그 목록 캐싱 |
+| 게시글 상세 캐싱 | `cache:posts:detail:{id}` | 10분 | published 게시글 개별 캐싱 |
+| 슬러그 조회 캐싱 | `cache:posts:slug:{slug}` | 10분 | 슬러그 기반 조회 캐싱 |
+| 분산 락 | `lock:{name}` | 10분 | 이미지 클린업 스케줄러 중복 실행 방지 |
+
+- **Graceful Degradation**: `REDIS_URL` 미설정 또는 Redis 미연결 시 모든 Redis 기능이 무시되고 기존과 동일하게 동작 (개발 환경에서 Redis 없이도 정상 동작)
+- **캐시 무효화**: 게시글 CUD 시 `cache:posts:*` 패턴 일괄 삭제
 
 ---
 
@@ -132,7 +156,10 @@ web-blog/
 | Python | 3.12+ | 런타임 |
 | SQLAlchemy | (async) | ORM / 비동기 DB 액세스 |
 | Alembic | 1.18+ | DB 마이그레이션 |
-| python-jose | 3.3+ | JWT 토큰 |
+| Redis | 7+ | 캐시, Rate Limiting, 토큰 블랙리스트 |
+| redis-py | 7.1+ | Redis 비동기 클라이언트 |
+| slowapi | 0.1.9+ | Rate Limiting (Redis/인메모리 백엔드) |
+| python-jose | 3.3+ | JWT 토큰 (액세스 + 리프레시) |
 | bcrypt | 4.0+ | 비밀번호 해싱 |
 | Pillow | 10.4+ | 이미지 처리 (크기 추출) |
 | asyncpg | 0.31+ | PostgreSQL 비동기 드라이버 |
@@ -146,9 +173,10 @@ web-blog/
 
 | Method | Path | 설명 | 인증 |
 |--------|------|------|------|
-| `POST` | `/api/auth/login` | 로그인 (쿠키 발급) | - |
+| `POST` | `/api/auth/login` | 로그인 (액세스 토큰 + 로그인 유지 시 리프레시 토큰 발급) | - |
+| `POST` | `/api/auth/refresh` | 리프레시 토큰으로 액세스 토큰 갱신 (Token Rotation) | 쿠키 |
 | `GET` | `/api/auth/me` | 현재 사용자 정보 | 필요 |
-| `POST` | `/api/auth/logout` | 로그아웃 (쿠키 제거) | 필요 |
+| `POST` | `/api/auth/logout` | 로그아웃 (토큰 블랙리스트 등록 + 쿠키 제거) | - |
 
 ### 포스트
 
@@ -200,6 +228,8 @@ Docker Compose를 사용하여 전체 스택을 한 번에 실행할 수 있습�
 [Browser] → [nginx (client)]
                ├── / ─────────→ SPA 정적 파일
                ├── /api/* ────→ [FastAPI (server)] → [PostgreSQL (db)]
+               │                       ↕
+               │                  [Redis (redis)]
                └── /uploads/* → 공유 볼륨 (정적 서빙)
                                       ↑
                               [server 이미지 업로드]
@@ -208,6 +238,7 @@ Docker Compose를 사용하여 전체 스택을 한 번에 실행할 수 있습�
 - **client** (nginx): React 빌드 파일 서빙, API 리버스 프록시, 업로드 이미지 정적 서빙
 - **server** (FastAPI): API 서버, 이미지 업로드 처리, DB 마이그레이션 자동 실행, 이미지 정리 스케줄러
 - **db** (PostgreSQL): 데이터 저장소
+- **redis** (Redis): 캐시, Rate Limiting, 토큰 블랙리스트, 조회수 중복 방지, 분산 락
 
 ### 실행
 
@@ -249,6 +280,7 @@ ENV=production
 | client | nginx:alpine | 80:80 | `uploads` (읽기 전용) |
 | server | python:3.12-slim | 8000 (내부) | `uploads` (읽기/쓰기) |
 | db | postgres:18.1-alpine | 5432 (내부) | `pgdata` |
+| redis | redis:7-alpine | 6379 (내부) | `redisdata` |
 
 ---
 
@@ -327,6 +359,10 @@ ADMIN_EMAIL=admin@example.com
 # 데이터베이스 (미설정 시 SQLite 사용)
 DATABASE_URL=sqlite+aiosqlite:///./blog.db
 # PostgreSQL 예시: postgresql+asyncpg://user:pass@localhost:5432/blogdb
+
+# Redis (캐시, Rate Limiting, 토큰 블랙리스트)
+# 미설정 시 인메모리 폴백 (개발 환경에서는 없어도 동작)
+# REDIS_URL=redis://localhost:6379/0
 
 # CORS 허용 오리진 (쉼표 구분)
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
@@ -426,7 +462,11 @@ pytest
 ## 보안
 
 - **HttpOnly 쿠키**: JWT 토큰을 HttpOnly + Secure + SameSite=Lax 쿠키에 저장
+- **이중 토큰 전략**: 단기 액세스 토큰 (30분) + 장기 리프레시 토큰 (7일), 리프레시 토큰은 `/api/auth` 경로로 제한
+- **Refresh Token Rotation**: 리프레시 시 이전 토큰을 Redis 블랙리스트에 등록, 토큰 탈취 시 재사용 차단
+- **토큰 블랙리스트**: 로그아웃/토큰 회전 시 JTI를 Redis에 등록하여 즉시 무효화
 - **비밀번호 해싱**: bcrypt 기반 단방향 해싱
+- **Rate Limiting**: Redis 기반 분산 Rate Limiting (로그인 5/분, 이미지 업로드 30/분 등)
 - **XSS 방어**: 콘텐츠 내 `<script>`, `javascript:`, 이벤트 핸들러 제거
 - **URL 검증**: 이미지/링크 URL에서 위험한 프로토콜 차단 (`javascript:`, `data:`, `vbscript:`)
 - **파일명 정제**: 업로드 파일명에서 경로 탐색 문자 제거, 안전 문자만 허용

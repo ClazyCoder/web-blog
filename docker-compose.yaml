@@ -18,6 +18,21 @@ services:
       retries: 5
 
   # ============================================
+  # Redis (캐시, Rate Limiting, 토큰 블랙리스트)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
   # FastAPI 백엔드
   # ============================================
   server:
@@ -28,11 +43,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       # 환경 설정 (production에서 API 문서 비활성화)
       ENV: production
       # 데이터베이스
       DATABASE_URL: postgresql+asyncpg://blog_user:blog_password@db:5432/blog_db
+      # Redis
+      REDIS_URL: redis://redis:6379/0
       # 인증
       SECRET_KEY: ${SECRET_KEY:-change-this-secret-key-in-production}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
@@ -65,4 +84,5 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   uploads:

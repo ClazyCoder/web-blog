@@ -11,7 +11,7 @@ interface User {
 export interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
-    login: (username: string, password: string) => Promise<boolean>;
+    login: (username: string, password: string, rememberMe?: boolean) => Promise<boolean>;
     logout: () => Promise<void>;
     isLoading: boolean;
 }
@@ -40,12 +40,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         initAuth();
     }, []);
 
-    const login = async (username: string, password: string): Promise<boolean> => {
+    const login = async (username: string, password: string, rememberMe: boolean = false): Promise<boolean> => {
         try {
             // 서버에 로그인 요청 (HttpOnly 쿠키에 토큰 저장됨)
             await api.post('/api/auth/login', {
                 username,
-                password
+                password,
+                remember_me: rememberMe,
             });
 
             // 사용자 정보 가져오기

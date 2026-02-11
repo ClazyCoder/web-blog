@@ -10,6 +10,7 @@ class UserLogin(BaseModel):
     """사용자 로그인 스키마"""
     username: str
     password: str
+    remember_me: bool = False
     
     @field_validator('username')
     @classmethod
