@@ -454,10 +454,10 @@ async def trigger_cleanup(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    고아 이미지 정리 수동 실행 (인증 필요)
+    고아 이미지 강제 정리 수동 실행 (인증 필요)
     
     Returns:
         정리 결과 요약
     """
-    result = await run_cleanup()
+    result = await run_cleanup(use_lock=False, force_orphan_cleanup=True)
     return result

@@ -31,23 +31,26 @@ SOFT_DELETE_TTL_DAYS = 7       # soft-delete 이미지 영구 삭제까지 대�
 CLEANUP_INTERVAL_HOURS = 1     # 정리 작업 실행 간격 (시간)
 
 
-async def cleanup_orphan_images(db: AsyncSession) -> dict:
+async def cleanup_orphan_images(db: AsyncSession, force: bool = False) -> dict:
     """
     고아 이미지 정리 (임시 업로드 후 미연결 이미지)
     
-    조건: is_temporary=True AND post_id IS NULL AND created_at < (현재 - ORPHAN_TTL_HOURS)
+    조건:
+    - 기본: is_temporary=True AND post_id IS NULL AND created_at < (현재 - ORPHAN_TTL_HOURS)
+    - 강제: is_temporary=True AND post_id IS NULL (생성 시각 무시)
     동작: 파일 삭제 + soft-delete (deleted_at 설정)
     """
-    cutoff = datetime.now() - timedelta(hours=ORPHAN_TTL_HOURS)
-    
-    stmt = select(Image).where(
-        and_(
-            Image.is_temporary.is_(True),
-            Image.post_id.is_(None),
-            Image.deleted_at.is_(None),
-            Image.created_at < cutoff,
-        )
-    )
+    conditions = [
+        Image.is_temporary.is_(True),
+        Image.post_id.is_(None),
+        Image.deleted_at.is_(None),
+    ]
+    cutoff = None
+    if not force:
+        cutoff = datetime.now() - timedelta(hours=ORPHAN_TTL_HOURS)
+        conditions.append(Image.created_at < cutoff)
+
+    stmt = select(Image).where(and_(*conditions))
     result = await db.execute(stmt)
     orphans = result.scalars().all()
     
@@ -72,6 +75,7 @@ async def cleanup_orphan_images(db: AsyncSession) -> dict:
     
     return {
         "type": "orphan_cleanup",
+        "forced": force,
         "found": len(orphans),
         "deleted": deleted_count,
         "errors": errors,
@@ -123,22 +127,28 @@ async def purge_soft_deleted_images(db: AsyncSession) -> dict:
     }
 
 
-async def run_cleanup() -> dict:
+async def run_cleanup(use_lock: bool = True, force_orphan_cleanup: bool = False) -> dict:
     """
     전체 정리 작업 실행 (분산 락으로 중복 실행 방지)
     
     Returns:
         정리 결과 요약
     """
-    # 분산 락 획득 시도 (TTL 10분 — 클린업 작업 최대 시간)
-    if not await acquire_lock("image_cleanup", ttl=600):
-        logger.info("Image cleanup skipped: another instance is running")
-        return {"timestamp": datetime.now().isoformat(), "skipped": True}
+    lock_acquired = False
+    if use_lock:
+        # 분산 락 획득 시도 (TTL 10분 — 클린업 작업 최대 시간)
+        if not await acquire_lock("image_cleanup", ttl=600):
+            logger.info("Image cleanup skipped: another instance is running")
+            return {"timestamp": datetime.now().isoformat(), "skipped": True}
+        lock_acquired = True
 
     try:
         async with AsyncSessionLocal() as db:
             try:
-                orphan_result = await cleanup_orphan_images(db)
+                orphan_result = await cleanup_orphan_images(
+                    db,
+                    force=force_orphan_cleanup,
+                )
                 purge_result = await purge_soft_deleted_images(db)
                 
                 summary = {
@@ -171,7 +181,8 @@ async def run_cleanup() -> dict:
                     "error": str(e),
                 }
     finally:
-        await release_lock("image_cleanup")
+        if lock_acquired:
+            await release_lock("image_cleanup")
 
 
 async def start_cleanup_scheduler():

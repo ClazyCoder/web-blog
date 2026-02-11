@@ -490,7 +490,11 @@ async def delete_post(
         current_user: 현재 로그인한 사용자
         db: 비동기 데이터베이스 세션
     """
-    stmt = select(Post).filter(Post.id == post_id)
+    stmt = (
+        select(Post)
+        .options(selectinload(Post.images))
+        .filter(Post.id == post_id)
+    )
     result = await db.execute(stmt)
     post = result.scalar_one_or_none()
     
@@ -501,6 +505,12 @@ async def delete_post(
         )
     
     try:
+        # 연결된 이미지를 orphan으로 전환 (정리 서비스가 감지하도록)
+        for img in post.images:
+            if not img.deleted_at:
+                img.post_id = None
+                img.is_temporary = True
+
         if permanent:
             # 영구 삭제
             await db.delete(post)

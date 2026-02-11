@@ -100,17 +100,22 @@ const Admin: React.FC = () => {
 
     const handleCleanup = async () => {
         if (isCleaningUp) return;
-        if (!confirm('만료된 고아 이미지를 정리하시겠습니까?')) return;
+        if (!confirm('고아 이미지를 강제로 정리하시겠습니까?\n(TTL과 무관하게 모든 고아 이미지가 정리됩니다)')) return;
 
         setIsCleaningUp(true);
         setCleanupResult(null);
         try {
             const res = await api.post('/api/upload/admin/cleanup');
             const data = res.data;
+            if (data.skipped) {
+                setCleanupResult('정리 작업이 이미 실행 중이라 이번 요청은 건너뛰었습니다. 잠시 후 다시 시도해주세요.');
+                await fetchData();
+                return;
+            }
             const orphanDeleted = data.orphan_cleanup?.deleted ?? 0;
             const purged = data.purge_soft_deleted?.purged ?? 0;
             setCleanupResult(
-                `정리 완료: 고아 이미지 ${orphanDeleted}개 삭제, 영구 삭제 ${purged}개 처리`
+                `강제 정리 완료: 고아 이미지 ${orphanDeleted}개 삭제, 영구 삭제 ${purged}개 처리`
             );
             // 데이터 새로고침
             await fetchData();
@@ -195,7 +200,7 @@ const Admin: React.FC = () => {
                         {isCleaningUp && (
                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                         )}
-                        만료 이미지 정리 실행
+                        고아 이미지 강제 정리
                     </button>
                 </div>
             )}
