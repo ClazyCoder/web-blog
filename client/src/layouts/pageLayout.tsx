@@ -255,6 +255,25 @@ const PageLayout: React.FC = () => {
     // 사이트 이름 (환경변수 또는 기본값)
     const siteName = import.meta.env.VITE_SITE_NAME || 'YSG Blog';
 
+    // OG 메타태그용 description (excerpt 우선, 없으면 본문에서 추출)
+    // ※ 훅은 조건부 return 전에 호출해야 함 (Rules of Hooks)
+    const ogDescription = useMemo(() => {
+        if (!pageData) return '';
+        if (pageData.excerpt) return pageData.excerpt;
+        // 마크다운 문법을 간단히 제거하여 순수 텍스트 추출
+        let text = pageData.content;
+        text = text.replace(/!\[.*?\]\(.*?\)/g, '');          // 이미지
+        text = text.replace(/\[([^\]]+)\]\(.*?\)/g, '$1');    // 링크
+        text = text.replace(/#{1,6}\s+/g, '');                // 헤딩
+        text = text.replace(/\*{1,3}(.*?)\*{1,3}/g, '$1');   // 볼드·이탤릭
+        text = text.replace(/`{1,3}[^`]*`{1,3}/g, '');       // 인라인 코드
+        text = text.replace(/```[\s\S]*?```/g, '');           // 코드 블록
+        text = text.replace(/>\s+/g, '');                     // 인용문
+        text = text.replace(/---+/g, '');                     // 수평선
+        text = text.replace(/\s+/g, ' ').trim();
+        return text.length > 200 ? text.slice(0, 200) + '...' : text;
+    }, [pageData?.content, pageData?.excerpt]);
+
     if (loading) {
         return (
             <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -279,23 +298,6 @@ const PageLayout: React.FC = () => {
             </div>
         );
     }
-
-    // OG 메타태그용 description (excerpt 우선, 없으면 본문에서 추출)
-    const ogDescription = useMemo(() => {
-        if (pageData.excerpt) return pageData.excerpt;
-        // 마크다운 문법을 간단히 제거하여 순수 텍스트 추출
-        let text = pageData.content;
-        text = text.replace(/!\[.*?\]\(.*?\)/g, '');          // 이미지
-        text = text.replace(/\[([^\]]+)\]\(.*?\)/g, '$1');    // 링크
-        text = text.replace(/#{1,6}\s+/g, '');                // 헤딩
-        text = text.replace(/\*{1,3}(.*?)\*{1,3}/g, '$1');   // 볼드·이탤릭
-        text = text.replace(/`{1,3}[^`]*`{1,3}/g, '');       // 인라인 코드
-        text = text.replace(/```[\s\S]*?```/g, '');           // 코드 블록
-        text = text.replace(/>\s+/g, '');                     // 인용문
-        text = text.replace(/---+/g, '');                     // 수평선
-        text = text.replace(/\s+/g, ' ').trim();
-        return text.length > 200 ? text.slice(0, 200) + '...' : text;
-    }, [pageData.content, pageData.excerpt]);
 
     // 현재 페이지의 절대 URL
     const pageUrl = `${window.location.origin}/board/${pageData.id}`;
