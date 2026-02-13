@@ -674,6 +674,55 @@ const EditorLayout: React.FC = () => {
         }, 0);
     };
 
+    // Tab 키 입력 핸들러
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            const textarea = e.currentTarget;
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const scrollTop = textarea.scrollTop;
+            const tab = '    '; // 스페이스 4칸
+
+            if (e.shiftKey) {
+                // Shift+Tab: 현재 줄의 앞쪽 들여쓰기 제거
+                const lineStart = editorData.markdown.lastIndexOf('\n', start - 1) + 1;
+                const lineText = editorData.markdown.substring(lineStart, end);
+                const unindented = lineText.replace(/^( {1,4}|\t)/, '');
+                const removed = lineText.length - unindented.length;
+
+                if (removed > 0) {
+                    const newMarkdown =
+                        editorData.markdown.substring(0, lineStart) +
+                        unindented +
+                        editorData.markdown.substring(end);
+                    setEditorData({ ...editorData, markdown: newMarkdown });
+
+                    setTimeout(() => {
+                        textarea.focus();
+                        const newStart = Math.max(start - removed, lineStart);
+                        textarea.setSelectionRange(newStart, end - removed);
+                        textarea.scrollTop = scrollTop;
+                    }, 0);
+                }
+            } else {
+                // Tab: 커서 위치에 들여쓰기 삽입
+                const newMarkdown =
+                    editorData.markdown.substring(0, start) +
+                    tab +
+                    editorData.markdown.substring(end);
+                setEditorData({ ...editorData, markdown: newMarkdown });
+
+                setTimeout(() => {
+                    textarea.focus();
+                    const newPosition = start + tab.length;
+                    textarea.setSelectionRange(newPosition, newPosition);
+                    textarea.scrollTop = scrollTop;
+                }, 0);
+            }
+        }
+    };
+
     // 게시글 로딩 중이면 로딩 표시
     if (isLoadingPost) {
         return (
@@ -925,6 +974,7 @@ const EditorLayout: React.FC = () => {
                             id="markdown-editor"
                             value={editorData.markdown}
                             onChange={(e) => setEditorData({ ...editorData, markdown: e.target.value })}
+                            onKeyDown={handleKeyDown}
                             onPaste={handlePaste}
                             placeholder="마크다운으로 작성하세요...&#10;&#10;💡 팁:&#10;  • 이미지를 드래그 앤 드롭하거나&#10;  • Ctrl+V로 클립보드 이미지를 붙여넣거나&#10;  • 툴바의 업로드 버튼을 사용하세요"
                             className="w-full h-full p-6 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none outline-none font-mono text-sm leading-relaxed"
