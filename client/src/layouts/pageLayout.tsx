@@ -305,7 +305,7 @@ const PageLayout: React.FC = () => {
                     {/* Markdown 콘텐츠 */}
                     <div className="max-w-none markdown-content">
                         <ReactMarkdown
-                            remarkPlugins={[remarkGfm, remarkMath]}
+                            remarkPlugins={[remarkMath, remarkGfm]}
                             rehypePlugins={[rehypeKatex, rehypeHighlight]}
                             components={{
                                 h1: ({ children }) => {

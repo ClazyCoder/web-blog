@@ -951,7 +951,7 @@ const EditorLayout: React.FC = () => {
                             <div className="p-6 max-w-4xl mx-auto">
                                 <div className="markdown-content">
                                     <ReactMarkdown
-                                        remarkPlugins={[remarkGfm, remarkMath]}
+                                        remarkPlugins={[remarkMath, remarkGfm]}
                                         rehypePlugins={[rehypeKatex, rehypeHighlight]}
                                         components={{
                                             h1: ({ children }) => (
