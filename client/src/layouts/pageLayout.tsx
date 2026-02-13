@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -55,6 +55,7 @@ function findHeadingId(text: string, level: number, headings: TocItem[], usedIds
 const PageLayout: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
     const { isAuthenticated } = useAuth();
     const [pageData, setPageData] = useState<PostData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -65,7 +66,7 @@ const PageLayout: React.FC = () => {
     // TOC 상태
     const [activeHeadingId, setActiveHeadingId] = useState<string>('');
     const [isMobileTocOpen, setIsMobileTocOpen] = useState(false);
-    const headingElementsRef = useRef<Map<string, IntersectionObserverEntry>>(new Map());
+    const lastTocNavigatedHashRef = useRef<string>('');
 
     useEffect(() => {
         const controller = new AbortController();
@@ -114,71 +115,94 @@ const PageLayout: React.FC = () => {
         return parseMarkdownHeadings(pageData.content);
     }, [pageData?.content]);
 
-    // heading ID 매칭용 ref
-    const usedIdsRef = useRef<Set<string>>(new Set());
+    // 렌더마다 동일한 순서로 heading id를 재계산해 DOM id를 안정적으로 유지
+    const renderUsedIds = new Set<string>();
 
-    // 콘텐츠/헤딩 변경 시 초기화 (렌더 중 mutation 방지)
-    useEffect(() => {
-        usedIdsRef.current = new Set();
-    }, [pageData?.content, headings]);
+    // 스크롤 위치 기준으로 활성 헤딩을 계산해 TOC 하이라이트를 동기화
+    const updateActiveHeadingByScroll = useCallback(() => {
+        if (headings.length === 0) return;
 
-    // IntersectionObserver로 활성 헤딩 추적
+        const anchorOffset = 96;
+        let nearestPastId = '';
+        let nearestFutureId = '';
+        let nearestFutureTop = Number.POSITIVE_INFINITY;
+
+        headings.forEach((heading) => {
+            const el = document.getElementById(heading.id);
+            if (!el) return;
+
+            const top = el.getBoundingClientRect().top - anchorOffset;
+
+            if (top <= 0) {
+                nearestPastId = heading.id;
+                return;
+            }
+
+            if (top < nearestFutureTop) {
+                nearestFutureTop = top;
+                nearestFutureId = heading.id;
+            }
+        });
+
+        const nextActiveId = nearestPastId || nearestFutureId;
+        if (!nextActiveId) return;
+
+        setActiveHeadingId((prev) => (prev === nextActiveId ? prev : nextActiveId));
+    }, [headings]);
+
     useEffect(() => {
         if (headings.length === 0) return;
 
-        const callback: IntersectionObserverCallback = (entries) => {
-            entries.forEach((entry) => {
-                headingElementsRef.current.set(entry.target.id, entry);
+        let rafId = 0;
+        let ticking = false;
+
+        const syncActiveHeading = () => {
+            if (ticking) return;
+            ticking = true;
+            rafId = window.requestAnimationFrame(() => {
+                updateActiveHeadingByScroll();
+                ticking = false;
             });
-
-            // 단일 스캔으로 활성 헤딩 선택
-            let nearestTopNonNegativeId = '';
-            let nearestTopNonNegativeTop = Number.POSITIVE_INFINITY;
-            let largestNegativeTopId = '';
-            let largestNegativeTop = Number.NEGATIVE_INFINITY;
-
-            headingElementsRef.current.forEach((entry) => {
-                if (!entry.isIntersecting) return;
-
-                const top = entry.boundingClientRect.top;
-                if (top >= 0) {
-                    if (top < nearestTopNonNegativeTop) {
-                        nearestTopNonNegativeTop = top;
-                        nearestTopNonNegativeId = entry.target.id;
-                    }
-                    return;
-                }
-
-                if (top > largestNegativeTop) {
-                    largestNegativeTop = top;
-                    largestNegativeTopId = entry.target.id;
-                }
-            });
-
-            const nextActiveId = nearestTopNonNegativeId || largestNegativeTopId;
-            if (nextActiveId) {
-                setActiveHeadingId(nextActiveId);
-            }
         };
 
-        const observer = new IntersectionObserver(callback, {
-            rootMargin: '0px 0px -80% 0px',
-            threshold: 0,
-        });
-
-        const rafId = requestAnimationFrame(() => {
-            headings.forEach((heading) => {
-                const el = document.getElementById(heading.id);
-                if (el) observer.observe(el);
-            });
-        });
+        // 초기 진입 시에도 현재 스크롤 위치와 TOC를 맞춘다.
+        syncActiveHeading();
+        window.addEventListener('scroll', syncActiveHeading, { passive: true });
+        window.addEventListener('resize', syncActiveHeading);
 
         return () => {
-            cancelAnimationFrame(rafId);
-            observer.disconnect();
-            headingElementsRef.current.clear();
+            window.removeEventListener('scroll', syncActiveHeading);
+            window.removeEventListener('resize', syncActiveHeading);
+            window.cancelAnimationFrame(rafId);
         };
-    }, [headings]);
+    }, [headings, updateActiveHeadingByScroll]);
+
+    const scrollToHeadingByHash = useCallback((hash: string) => {
+        const el = document.getElementById(hash);
+        if (!el) return false;
+
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const y = el.getBoundingClientRect().top + window.scrollY - 80;
+        window.scrollTo({ top: y, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+        setActiveHeadingId(hash);
+        return true;
+    }, []);
+
+    // 해시 기반 진입/이동 동기화
+    useEffect(() => {
+        const hash = location.hash.slice(1);
+        if (!hash || headings.length === 0) return;
+
+        // TOC 클릭 직후의 동일 해시 변경은 이미 TableOfContents에서 스크롤했으므로 중복 스크롤 방지
+        if (lastTocNavigatedHashRef.current === hash) {
+            lastTocNavigatedHashRef.current = '';
+            setActiveHeadingId(hash);
+            return;
+        }
+
+        // 브라우저 뒤/앞 이동, 직접 URL 해시 진입 케이스 처리
+        scrollToHeadingByHash(hash);
+    }, [location.hash, headings, scrollToHeadingByHash]);
 
     const handleEdit = () => {
         if (pageData) {
@@ -213,9 +237,20 @@ const PageLayout: React.FC = () => {
     };
 
     const handleTocItemClick = useCallback((headingId: string) => {
+        const currentHash = location.hash.slice(1);
+
+        // 같은 해시를 다시 클릭한 경우에도 본문 스크롤을 강제해 UX를 일관되게 유지
+        if (currentHash === headingId) {
+            scrollToHeadingByHash(headingId);
+            setIsMobileTocOpen(false);
+            return;
+        }
+
+        lastTocNavigatedHashRef.current = headingId;
         setActiveHeadingId(headingId);
         setIsMobileTocOpen(false);
-    }, []);
+        navigate(`${location.pathname}#${headingId}`, { replace: true, preventScrollReset: true });
+    }, [navigate, location.pathname, location.hash, scrollToHeadingByHash]);
 
     if (loading) {
         return (
@@ -310,27 +345,27 @@ const PageLayout: React.FC = () => {
                             components={{
                                 h1: ({ children }) => {
                                     const text = extractTextFromChildren(children);
-                                    const headingId = findHeadingId(text, 1, headings, usedIdsRef.current);
+                                    const headingId = findHeadingId(text, 1, headings, renderUsedIds);
                                     return (
-                                        <h1 id={headingId} className="text-2xl sm:text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100 scroll-mt-4">
+                                        <h1 id={headingId} className="text-2xl sm:text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                             {children}
                                         </h1>
                                     );
                                 },
                                 h2: ({ children }) => {
                                     const text = extractTextFromChildren(children);
-                                    const headingId = findHeadingId(text, 2, headings, usedIdsRef.current);
+                                    const headingId = findHeadingId(text, 2, headings, renderUsedIds);
                                     return (
-                                        <h2 id={headingId} className="text-xl sm:text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100 scroll-mt-4">
+                                        <h2 id={headingId} className="text-xl sm:text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                             {children}
                                         </h2>
                                     );
                                 },
                                 h3: ({ children }) => {
                                     const text = extractTextFromChildren(children);
-                                    const headingId = findHeadingId(text, 3, headings, usedIdsRef.current);
+                                    const headingId = findHeadingId(text, 3, headings, renderUsedIds);
                                     return (
-                                        <h3 id={headingId} className="text-lg sm:text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100 scroll-mt-4">
+                                        <h3 id={headingId} className="text-lg sm:text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                             {children}
                                         </h3>
                                     );
