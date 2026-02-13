@@ -30,10 +30,22 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({
         e.preventDefault();
         const element = document.getElementById(id);
         if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // 헤더 높이(h-16 = 64px) 고려한 스크롤 오프셋
+            const headerOffset = 80;
+            const elementPosition = element.getBoundingClientRect().top;
+            const offsetPosition = elementPosition + window.scrollY - headerOffset;
+
+            onItemClick?.(id); // 모바일: 드로어 닫기 먼저
+            requestAnimationFrame(() => {
+                window.scrollTo({
+                    top: offsetPosition,
+                    behavior: 'smooth',
+                });
+            });
             history.replaceState(null, '', `#${id}`);
+        } else {
+            onItemClick?.(id);
         }
-        onItemClick?.(id);
     };
 
     if (headings.length === 0) return null;

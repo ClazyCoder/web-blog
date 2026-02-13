@@ -312,7 +312,7 @@ const PageLayout: React.FC = () => {
                                     const text = extractTextFromChildren(children);
                                     const headingId = findHeadingId(text, 1, headings, usedIdsRef.current);
                                     return (
-                                        <h1 id={headingId} className="text-2xl sm:text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100 scroll-mt-4">
+                                        <h1 id={headingId} className="text-2xl sm:text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                             {children}
                                         </h1>
                                     );
@@ -321,7 +321,7 @@ const PageLayout: React.FC = () => {
                                     const text = extractTextFromChildren(children);
                                     const headingId = findHeadingId(text, 2, headings, usedIdsRef.current);
                                     return (
-                                        <h2 id={headingId} className="text-xl sm:text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100 scroll-mt-4">
+                                        <h2 id={headingId} className="text-xl sm:text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                             {children}
                                         </h2>
                                     );
@@ -330,7 +330,7 @@ const PageLayout: React.FC = () => {
                                     const text = extractTextFromChildren(children);
                                     const headingId = findHeadingId(text, 3, headings, usedIdsRef.current);
                                     return (
-                                        <h3 id={headingId} className="text-lg sm:text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100 scroll-mt-4">
+                                        <h3 id={headingId} className="text-lg sm:text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                             {children}
                                         </h3>
                                     );
