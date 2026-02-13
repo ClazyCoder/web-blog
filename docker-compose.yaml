@@ -9,8 +9,10 @@ services:
       POSTGRES_DB: blog_db
       POSTGRES_USER: blog_user
       POSTGRES_PASSWORD: blog_password
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # - pgdata:/var/lib/postgresql/18/docker # postgres:18.1-alpine 이미지 기본 볼륨 경로
+      - pgdata:/var/lib/postgresql/data/pgdata # 컨테이너 내부에서 사용할 볼륨 경로
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U blog_user -d blog_db"]
       interval: 5s
