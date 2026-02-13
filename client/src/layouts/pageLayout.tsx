@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -55,6 +55,7 @@ function findHeadingId(text: string, level: number, headings: TocItem[], usedIds
 const PageLayout: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
     const { isAuthenticated } = useAuth();
     const [pageData, setPageData] = useState<PostData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -215,7 +216,8 @@ const PageLayout: React.FC = () => {
     const handleTocItemClick = useCallback((headingId: string) => {
         setActiveHeadingId(headingId);
         setIsMobileTocOpen(false);
-    }, []);
+        navigate(`${location.pathname}#${headingId}`, { replace: true });
+    }, [navigate, location.pathname]);
 
     if (loading) {
         return (
