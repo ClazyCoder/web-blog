@@ -17,7 +17,7 @@ import os
 import uvicorn
 
 # 라우터 임포트
-from routers import image, auth as auth_router, post
+from routers import image, auth as auth_router, post, og
 import auth
 
 # 서비스 임포트
@@ -96,6 +96,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.include_router(auth_router.router)
 app.include_router(image.router)
 app.include_router(post.router)
+app.include_router(og.router)
 
 
 @app.get("/")

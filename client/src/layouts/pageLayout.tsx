@@ -252,6 +252,9 @@ const PageLayout: React.FC = () => {
         navigate(`${location.pathname}#${headingId}`, { replace: true, preventScrollReset: true });
     }, [navigate, location.pathname, location.hash, scrollToHeadingByHash]);
 
+    // 사이트 이름 (환경변수 또는 기본값)
+    const siteName = import.meta.env.VITE_SITE_NAME || 'YSG Blog';
+
     if (loading) {
         return (
             <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -279,6 +282,9 @@ const PageLayout: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+            {/* 브라우저 탭 제목 (React 19 자동 <head> 호이스팅) */}
+            <title>{`${pageData.title} - ${siteName}`}</title>
+
             <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 xl:flex xl:gap-8">
                 {/* 메인 콘텐츠 영역 */}
                 <article className="flex-1 min-w-0 max-w-4xl">
