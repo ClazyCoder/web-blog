@@ -163,7 +163,7 @@ const PageLayout: React.FC = () => {
         };
 
         const observer = new IntersectionObserver(callback, {
-            rootMargin: '0px 0px -80% 0px',
+            rootMargin: '0px 0px -60% 0px',
             threshold: 0,
         });
 
@@ -180,6 +180,18 @@ const PageLayout: React.FC = () => {
             headingElementsRef.current.clear();
         };
     }, [headings]);
+
+    // Hash로 진입 시 해당 섹션으로 스크롤
+    useEffect(() => {
+        const hash = location.hash.slice(1);
+        if (!hash || headings.length === 0) return;
+        const el = document.getElementById(hash);
+        if (el) {
+            const y = el.getBoundingClientRect().top + window.scrollY - 80;
+            window.scrollTo({ top: y, behavior: 'smooth' });
+            setActiveHeadingId(hash);
+        }
+    }, [location.hash, headings]);
 
     const handleEdit = () => {
         if (pageData) {
@@ -216,7 +228,7 @@ const PageLayout: React.FC = () => {
     const handleTocItemClick = useCallback((headingId: string) => {
         setActiveHeadingId(headingId);
         setIsMobileTocOpen(false);
-        navigate(`${location.pathname}#${headingId}`, { replace: true });
+        navigate(`${location.pathname}#${headingId}`, { replace: true, preventScrollReset: true });
     }, [navigate, location.pathname]);
 
     if (loading) {

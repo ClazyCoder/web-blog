@@ -35,13 +35,14 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({
             const elementPosition = element.getBoundingClientRect().top;
             const offsetPosition = elementPosition + window.scrollY - headerOffset;
 
-            onItemClick?.(id); // 모바일: 드로어 닫기, URL hash 업데이트
+            // 스크롤 먼저 실행 (navigate가 스크롤을 덮어쓰지 않도록)
             requestAnimationFrame(() => {
                 window.scrollTo({
                     top: offsetPosition,
                     behavior: 'smooth',
                 });
             });
+            onItemClick?.(id); // 모바일: 드로어 닫기, URL hash 업데이트
         } else {
             onItemClick?.(id);
         }
