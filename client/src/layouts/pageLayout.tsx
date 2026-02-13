@@ -66,7 +66,6 @@ const PageLayout: React.FC = () => {
     // TOC 상태
     const [activeHeadingId, setActiveHeadingId] = useState<string>('');
     const [isMobileTocOpen, setIsMobileTocOpen] = useState(false);
-    const headingElementsRef = useRef<Map<string, IntersectionObserverEntry>>(new Map());
     const lastTocNavigatedHashRef = useRef<string>('');
 
     useEffect(() => {
@@ -119,64 +118,64 @@ const PageLayout: React.FC = () => {
     // 렌더마다 동일한 순서로 heading id를 재계산해 DOM id를 안정적으로 유지
     const renderUsedIds = new Set<string>();
 
-    // IntersectionObserver로 활성 헤딩 추적
+    // 스크롤 위치 기준으로 활성 헤딩을 계산해 TOC 하이라이트를 동기화
+    const updateActiveHeadingByScroll = useCallback(() => {
+        if (headings.length === 0) return;
+
+        const anchorOffset = 96;
+        let nearestPastId = '';
+        let nearestFutureId = '';
+        let nearestFutureTop = Number.POSITIVE_INFINITY;
+
+        headings.forEach((heading) => {
+            const el = document.getElementById(heading.id);
+            if (!el) return;
+
+            const top = el.getBoundingClientRect().top - anchorOffset;
+
+            if (top <= 0) {
+                nearestPastId = heading.id;
+                return;
+            }
+
+            if (top < nearestFutureTop) {
+                nearestFutureTop = top;
+                nearestFutureId = heading.id;
+            }
+        });
+
+        const nextActiveId = nearestPastId || nearestFutureId;
+        if (!nextActiveId) return;
+
+        setActiveHeadingId((prev) => (prev === nextActiveId ? prev : nextActiveId));
+    }, [headings]);
+
     useEffect(() => {
         if (headings.length === 0) return;
-        const headingEntries = headingElementsRef.current;
 
-        const callback: IntersectionObserverCallback = (entries) => {
-            entries.forEach((entry) => {
-                headingEntries.set(entry.target.id, entry);
+        let rafId = 0;
+        let ticking = false;
+
+        const syncActiveHeading = () => {
+            if (ticking) return;
+            ticking = true;
+            rafId = window.requestAnimationFrame(() => {
+                updateActiveHeadingByScroll();
+                ticking = false;
             });
-
-            // 단일 스캔으로 활성 헤딩 선택
-            let nearestTopNonNegativeId = '';
-            let nearestTopNonNegativeTop = Number.POSITIVE_INFINITY;
-            let largestNegativeTopId = '';
-            let largestNegativeTop = Number.NEGATIVE_INFINITY;
-
-            headingEntries.forEach((entry) => {
-                if (!entry.isIntersecting) return;
-
-                const top = entry.boundingClientRect.top;
-                if (top >= 0) {
-                    if (top < nearestTopNonNegativeTop) {
-                        nearestTopNonNegativeTop = top;
-                        nearestTopNonNegativeId = entry.target.id;
-                    }
-                    return;
-                }
-
-                if (top > largestNegativeTop) {
-                    largestNegativeTop = top;
-                    largestNegativeTopId = entry.target.id;
-                }
-            });
-
-            const nextActiveId = nearestTopNonNegativeId || largestNegativeTopId;
-            if (nextActiveId) {
-                setActiveHeadingId(nextActiveId);
-            }
         };
 
-        const observer = new IntersectionObserver(callback, {
-            rootMargin: '0px 0px -60% 0px',
-            threshold: 0,
-        });
-
-        const rafId = requestAnimationFrame(() => {
-            headings.forEach((heading) => {
-                const el = document.getElementById(heading.id);
-                if (el) observer.observe(el);
-            });
-        });
+        // 초기 진입 시에도 현재 스크롤 위치와 TOC를 맞춘다.
+        syncActiveHeading();
+        window.addEventListener('scroll', syncActiveHeading, { passive: true });
+        window.addEventListener('resize', syncActiveHeading);
 
         return () => {
-            cancelAnimationFrame(rafId);
-            observer.disconnect();
-            headingEntries.clear();
+            window.removeEventListener('scroll', syncActiveHeading);
+            window.removeEventListener('resize', syncActiveHeading);
+            window.cancelAnimationFrame(rafId);
         };
-    }, [headings]);
+    }, [headings, updateActiveHeadingByScroll]);
 
     const scrollToHeadingByHash = useCallback((hash: string) => {
         const el = document.getElementById(hash);
