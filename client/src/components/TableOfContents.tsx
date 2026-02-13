@@ -63,18 +63,37 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
 
     const tocTree = React.useMemo(() => buildTocTree(headings), [headings]);
     const parentMap = React.useMemo(() => buildParentMap(tocTree), [tocTree]);
+    const headingLevelMap = React.useMemo(() => {
+        const levelMap = new Map<string, number>();
+        headings.forEach((heading) => levelMap.set(heading.id, heading.level));
+        return levelMap;
+    }, [headings]);
+
+    const effectiveActiveId = React.useMemo(() => {
+        if (showDeepHeadings || !activeId) return activeId;
+        if ((headingLevelMap.get(activeId) ?? 0) < 3) return activeId;
+
+        let current = parentMap.get(activeId) ?? null;
+        while (current) {
+            if ((headingLevelMap.get(current) ?? 0) < 3) {
+                return current;
+            }
+            current = parentMap.get(current) ?? null;
+        }
+        return activeId;
+    }, [activeId, showDeepHeadings, parentMap, headingLevelMap]);
 
     const activePath = React.useMemo(() => {
         const path = new Set<string>();
-        if (!activeId) return path;
+        if (!effectiveActiveId) return path;
 
-        let current: string | null = activeId;
+        let current: string | null = effectiveActiveId;
         while (current) {
             path.add(current);
             current = parentMap.get(current) ?? null;
         }
         return path;
-    }, [activeId, parentMap]);
+    }, [effectiveActiveId, parentMap]);
 
     React.useEffect(() => {
         itemRefs.current.clear();
@@ -82,14 +101,14 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
     }, [headings]);
 
     React.useEffect(() => {
-        if (!activeId) return;
-        const activeElement = itemRefs.current.get(activeId);
+        if (!effectiveActiveId) return;
+        const activeElement = itemRefs.current.get(effectiveActiveId);
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         activeElement?.scrollIntoView({
             block: 'nearest',
             behavior: prefersReducedMotion ? 'auto' : 'smooth',
         });
-    }, [activeId]);
+    }, [effectiveActiveId]);
 
     const scrollToTop = () => {
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -122,7 +141,7 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
 
     const getVisibleChildren = (node: TocNode): TocNode[] => {
         return node.children.filter((child) => {
-            return showDeepHeadings || child.item.level < 3 || activePath.has(child.item.id);
+            return showDeepHeadings || child.item.level < 3;
         });
     };
 
@@ -132,11 +151,11 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
         return (
             <ul className={depth === 0 ? 'space-y-1' : 'mt-1 space-y-1'}>
                 {nodes.map((node) => {
-                    if (!showDeepHeadings && node.item.level >= 3 && !activePath.has(node.item.id)) {
+                    if (!showDeepHeadings && node.item.level >= 3) {
                         return null;
                     }
 
-                    const isActive = activeId === node.item.id;
+                    const isActive = effectiveActiveId === node.item.id;
                     const isOnActivePath = activePath.has(node.item.id);
                     const visibleChildren = getVisibleChildren(node);
                     const hasChildren = visibleChildren.length > 0;
