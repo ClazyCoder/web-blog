@@ -605,6 +605,7 @@ const EditorLayout: React.FC = () => {
 
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
+        const scrollTop = textarea.scrollTop; // 스크롤 위치 저장
         const selectedText = editorData.markdown.substring(start, end) || placeholder;
 
         let newText = '';
@@ -664,11 +665,12 @@ const EditorLayout: React.FC = () => {
 
         setEditorData({ ...editorData, markdown: newMarkdown });
 
-        // 커서 위치 조정
+        // 커서 위치 및 스크롤 위치 복원
         setTimeout(() => {
             textarea.focus();
             const newPosition = start + cursorOffset + (selectedText ? selectedText.length : 0);
             textarea.setSelectionRange(newPosition, newPosition);
+            textarea.scrollTop = scrollTop;
         }, 0);
     };
 
@@ -818,7 +820,7 @@ const EditorLayout: React.FC = () => {
 
                 {/* 툴바 */}
                 <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
-                    <div className="flex items-center gap-1 overflow-x-auto">
+                    <div className="flex items-center gap-1 overflow-x-auto" onMouseDown={(e) => { if ((e.target as HTMLElement).closest('.toolbar-btn')) e.preventDefault(); }}>
                         <button onClick={() => insertMarkdown('h1', '제목')} className="toolbar-btn" title="제목 1">
                             <span className="font-bold text-base">H1</span>
                         </button>
