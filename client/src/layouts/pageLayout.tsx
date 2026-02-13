@@ -231,20 +231,10 @@ const PageLayout: React.FC = () => {
     };
 
     const handleTocItemClick = useCallback((headingId: string) => {
-        tocClickHandledRef.current = true;
+        tocClickHandledRef.current = true; // hash useEffect 스크롤 스킵 (TableOfContents에서 이미 스크롤)
         setActiveHeadingId(headingId);
         setIsMobileTocOpen(false);
         navigate(`${location.pathname}#${headingId}`, { replace: true, preventScrollReset: true });
-        // navigate 직후 스크롤 (React Router 업데이트 이후 실행되도록 이중 rAF)
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                const el = document.getElementById(headingId);
-                if (el) {
-                    const y = el.getBoundingClientRect().top + window.scrollY - 80;
-                    window.scrollTo({ top: y, behavior: 'smooth' });
-                }
-            });
-        });
     }, [navigate, location.pathname]);
 
     if (loading) {

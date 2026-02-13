@@ -28,7 +28,13 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({
 
     const handleClick = (e: React.MouseEvent, id: string) => {
         e.preventDefault();
-        onItemClick?.(id); // 스크롤 및 URL 업데이트는 부모(handleTocItemClick)에서 처리
+        const element = document.getElementById(id);
+        if (element) {
+            const headerOffset = 80;
+            const y = element.getBoundingClientRect().top + window.scrollY - headerOffset;
+            window.scrollTo({ top: y, behavior: 'smooth' });
+        }
+        onItemClick?.(id); // URL 업데이트, 모바일 드로어 닫기
     };
 
     if (headings.length === 0) return null;
