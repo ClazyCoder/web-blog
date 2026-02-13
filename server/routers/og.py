@@ -156,10 +156,12 @@ async def get_og_page(
     # Description: excerpt 우선, 없으면 본문에서 추출
     description = post.excerpt or strip_markdown(post.content)
 
-    # Thumbnail URL → 절대 경로로 변환
+    # Thumbnail URL → 절대 경로로 변환 (없으면 favicon 사용)
     thumbnail = post.thumbnail
     if thumbnail and not thumbnail.startswith("http"):
         thumbnail = f"{site_url}{thumbnail}"
+    if not thumbnail:
+        thumbnail = f"{site_url}/android-chrome-512x512.png"
 
     return HTMLResponse(
         content=_build_og_html(

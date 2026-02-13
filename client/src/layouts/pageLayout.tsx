@@ -312,9 +312,11 @@ const PageLayout: React.FC = () => {
             <meta property="og:description" content={ogDescription} />
             <meta property="og:url" content={pageUrl} />
             <meta property="og:site_name" content={siteName} />
+            <meta property="og:image" content={`${window.location.origin}/android-chrome-512x512.png`} />
             <meta name="twitter:card" content="summary" />
             <meta name="twitter:title" content={pageData.title} />
             <meta name="twitter:description" content={ogDescription} />
+            <meta name="twitter:image" content={`${window.location.origin}/android-chrome-512x512.png`} />
 
             <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 xl:flex xl:gap-8">
                 {/* 메인 콘텐츠 영역 */}
