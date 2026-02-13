@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
 import { useAuth } from '../context/AuthContext';
@@ -84,7 +87,7 @@ const PageLayout: React.FC = () => {
                 // 조회수 증가 (한 번만 호출)
                 if (!viewCounted.current) {
                     viewCounted.current = true;
-                    api.post(`/api/posts/${id}/view`).catch(() => {});
+                    api.post(`/api/posts/${id}/view`).catch(() => { });
                 }
             } catch (err: any) {
                 if (controller.signal.aborted) return;
@@ -302,8 +305,8 @@ const PageLayout: React.FC = () => {
                     {/* Markdown 콘텐츠 */}
                     <div className="max-w-none markdown-content">
                         <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[rehypeHighlight]}
+                            remarkPlugins={[remarkGfm, remarkMath]}
+                            rehypePlugins={[rehypeKatex, rehypeHighlight]}
                             components={{
                                 h1: ({ children }) => {
                                     const text = extractTextFromChildren(children);
@@ -475,9 +478,8 @@ const PageLayout: React.FC = () => {
                         />
                     )}
                     <div
-                        className={`xl:hidden fixed bottom-0 left-0 right-0 z-50 transform transition-transform duration-300 ease-in-out ${
-                            isMobileTocOpen ? 'translate-y-0' : 'translate-y-full'
-                        }`}
+                        className={`xl:hidden fixed bottom-0 left-0 right-0 z-50 transform transition-transform duration-300 ease-in-out ${isMobileTocOpen ? 'translate-y-0' : 'translate-y-full'
+                            }`}
                     >
                         <div className="bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl border-t border-gray-200 dark:border-gray-700 max-h-[70vh] flex flex-col">
                             {/* 드로어 핸들 */}

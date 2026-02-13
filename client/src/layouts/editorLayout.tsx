@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
 import { useAuth } from '../context/AuthContext';
@@ -405,7 +408,7 @@ const EditorLayout: React.FC = () => {
                 prevData.markdown.substring(0, start) +
                 imageMarkdown +
                 prevData.markdown.substring(start);
-            
+
             return { ...prevData, markdown: newMarkdown };
         });
 
@@ -475,7 +478,7 @@ const EditorLayout: React.FC = () => {
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const x = e.clientX;
         const y = e.clientY;
-        
+
         if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
             setIsDragging(false);
         }
@@ -505,7 +508,7 @@ const EditorLayout: React.FC = () => {
 
         // 업로드할 이미지들을 순차적으로 처리
         const uploadedImageMarkdowns: string[] = [];
-        
+
         for (const file of imageFiles) {
             if (file.size > 5 * 1024 * 1024) {
                 alert(`${file.name}의 크기가 5MB를 초과합니다.`);
@@ -523,13 +526,13 @@ const EditorLayout: React.FC = () => {
         // 모든 이미지를 한 번에 삽입
         if (uploadedImageMarkdowns.length > 0) {
             const allImagesMarkdown = uploadedImageMarkdowns.join('\n') + '\n';
-            
+
             setEditorData(prevData => {
                 const newMarkdown =
                     prevData.markdown.substring(0, cursorPosition) +
                     allImagesMarkdown +
                     prevData.markdown.substring(cursorPosition);
-                
+
                 return { ...prevData, markdown: newMarkdown };
             });
 
@@ -559,7 +562,7 @@ const EditorLayout: React.FC = () => {
 
         // 업로드할 이미지들을 순차적으로 처리
         const uploadedImageMarkdowns: string[] = [];
-        
+
         for (const item of imageItems) {
             const file = item.getAsFile();
             if (!file) continue;
@@ -575,13 +578,13 @@ const EditorLayout: React.FC = () => {
         // 모든 이미지를 한 번에 삽입
         if (uploadedImageMarkdowns.length > 0) {
             const allImagesMarkdown = uploadedImageMarkdowns.join('\n') + '\n';
-            
+
             setEditorData(prevData => {
                 const newMarkdown =
                     prevData.markdown.substring(0, cursorPosition) +
                     allImagesMarkdown +
                     prevData.markdown.substring(cursorPosition);
-                
+
                 return { ...prevData, markdown: newMarkdown };
             });
 
@@ -696,7 +699,7 @@ const EditorLayout: React.FC = () => {
     // 인증되지 않은 경우
     if (!isAuthenticated) {
         return (
-            <UnauthorizedAccess 
+            <UnauthorizedAccess
                 redirectPath="/editor"
             />
         );
@@ -940,7 +943,7 @@ const EditorLayout: React.FC = () => {
 
                     {/* 미리보기 */}
                     {showPreview && (
-                        <div 
+                        <div
                             className={`overflow-y-auto bg-white dark:bg-gray-800 ${isPreviewMode ? 'block' : 'hidden lg:block'}`}
                             style={{ width: `${100 - editorWidth}%` }}
                         >
@@ -948,122 +951,122 @@ const EditorLayout: React.FC = () => {
                             <div className="p-6 max-w-4xl mx-auto">
                                 <div className="markdown-content">
                                     <ReactMarkdown
-                                        remarkPlugins={[remarkGfm]}
-                                        rehypePlugins={[rehypeHighlight]}
+                                        remarkPlugins={[remarkGfm, remarkMath]}
+                                        rehypePlugins={[rehypeKatex, rehypeHighlight]}
                                         components={{
-                                        h1: ({ children }) => (
-                                            <h1 className="text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100">
-                                                {children}
-                                            </h1>
-                                        ),
-                                        h2: ({ children }) => (
-                                            <h2 className="text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100">
-                                                {children}
-                                            </h2>
-                                        ),
-                                        h3: ({ children }) => (
-                                            <h3 className="text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100">
-                                                {children}
-                                            </h3>
-                                        ),
-                                        p: ({ children }) => (
-                                            <p className="mb-4 leading-7 text-gray-800 dark:text-gray-300">
-                                                {children}
-                                            </p>
-                                        ),
-                                        a: ({ href, children }) => {
-                                            // XSS 방지: javascript:, data:, vbscript: 등 위험한 스키마 차단
-                                            const isSafeUrl = href && 
-                                                !href.toLowerCase().startsWith('javascript:') &&
-                                                !href.toLowerCase().startsWith('data:') &&
-                                                !href.toLowerCase().startsWith('vbscript:');
-                                            
-                                            return (
-                                                <a
-                                                    href={isSafeUrl ? href : '#'}
-                                                    className="text-emerald-600 dark:text-emerald-400 hover:underline no-underline"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    onClick={!isSafeUrl ? (e) => e.preventDefault() : undefined}
-                                                >
+                                            h1: ({ children }) => (
+                                                <h1 className="text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100">
                                                     {children}
-                                                </a>
-                                            );
-                                        },
-                                        strong: ({ children }) => (
-                                            <strong className="font-semibold text-gray-900 dark:text-gray-100">
-                                                {children}
-                                            </strong>
-                                        ),
-                                        code: ({ className, children }) => {
-                                            const isInline = !className;
-                                            return isInline ? (
-                                                <code className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">
+                                                </h1>
+                                            ),
+                                            h2: ({ children }) => (
+                                                <h2 className="text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100">
                                                     {children}
-                                                </code>
-                                            ) : (
-                                                <code className={className}>{children}</code>
-                                            );
-                                        },
-                                        pre: ({ children }) => (
-                                            <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto my-4">
-                                                {children}
-                                            </pre>
-                                        ),
-                                        blockquote: ({ children }) => (
-                                            <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-700 dark:text-gray-400 my-4">
-                                                {children}
-                                            </blockquote>
-                                        ),
-                                        ul: ({ children }) => (
-                                            <ul className="list-disc pl-6 mb-4 text-gray-800 dark:text-gray-300">
-                                                {children}
-                                            </ul>
-                                        ),
-                                        ol: ({ children }) => (
-                                            <ol className="list-decimal pl-6 mb-4 text-gray-800 dark:text-gray-300">
-                                                {children}
-                                            </ol>
-                                        ),
-                                        li: ({ children }) => (
-                                            <li className="mb-2">{children}</li>
-                                        ),
-                                        table: ({ children }) => (
-                                            <div className="overflow-x-auto my-4">
-                                                <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
+                                                </h2>
+                                            ),
+                                            h3: ({ children }) => (
+                                                <h3 className="text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100">
                                                     {children}
-                                                </table>
-                                            </div>
-                                        ),
-                                        th: ({ children }) => (
-                                            <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold text-left">
-                                                {children}
-                                            </th>
-                                        ),
-                                        td: ({ children }) => (
-                                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-800 dark:text-gray-300">
-                                                {children}
-                                            </td>
-                                        ),
-                                        hr: () => (
-                                            <hr className="my-8 border-gray-300 dark:border-gray-700" />
-                                        ),
-                                        img: ({ src, alt }) => {
-                                            // XSS 방지: 안전한 이미지 URL만 허용
-                                            const isSafeUrl = src && 
-                                                (src.startsWith('http://') || 
-                                                 src.startsWith('https://') || 
-                                                 src.startsWith('/'));
-                                            
-                                            return isSafeUrl ? (
-                                                <img
-                                                    src={src}
-                                                    alt={alt || '이미지'}
-                                                    className="rounded-lg shadow-lg my-4 max-w-full h-auto"
-                                                />
-                                            ) : null;
-                                        },
-                                    }}
+                                                </h3>
+                                            ),
+                                            p: ({ children }) => (
+                                                <p className="mb-4 leading-7 text-gray-800 dark:text-gray-300">
+                                                    {children}
+                                                </p>
+                                            ),
+                                            a: ({ href, children }) => {
+                                                // XSS 방지: javascript:, data:, vbscript: 등 위험한 스키마 차단
+                                                const isSafeUrl = href &&
+                                                    !href.toLowerCase().startsWith('javascript:') &&
+                                                    !href.toLowerCase().startsWith('data:') &&
+                                                    !href.toLowerCase().startsWith('vbscript:');
+
+                                                return (
+                                                    <a
+                                                        href={isSafeUrl ? href : '#'}
+                                                        className="text-emerald-600 dark:text-emerald-400 hover:underline no-underline"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        onClick={!isSafeUrl ? (e) => e.preventDefault() : undefined}
+                                                    >
+                                                        {children}
+                                                    </a>
+                                                );
+                                            },
+                                            strong: ({ children }) => (
+                                                <strong className="font-semibold text-gray-900 dark:text-gray-100">
+                                                    {children}
+                                                </strong>
+                                            ),
+                                            code: ({ className, children }) => {
+                                                const isInline = !className;
+                                                return isInline ? (
+                                                    <code className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">
+                                                        {children}
+                                                    </code>
+                                                ) : (
+                                                    <code className={className}>{children}</code>
+                                                );
+                                            },
+                                            pre: ({ children }) => (
+                                                <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto my-4">
+                                                    {children}
+                                                </pre>
+                                            ),
+                                            blockquote: ({ children }) => (
+                                                <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-700 dark:text-gray-400 my-4">
+                                                    {children}
+                                                </blockquote>
+                                            ),
+                                            ul: ({ children }) => (
+                                                <ul className="list-disc pl-6 mb-4 text-gray-800 dark:text-gray-300">
+                                                    {children}
+                                                </ul>
+                                            ),
+                                            ol: ({ children }) => (
+                                                <ol className="list-decimal pl-6 mb-4 text-gray-800 dark:text-gray-300">
+                                                    {children}
+                                                </ol>
+                                            ),
+                                            li: ({ children }) => (
+                                                <li className="mb-2">{children}</li>
+                                            ),
+                                            table: ({ children }) => (
+                                                <div className="overflow-x-auto my-4">
+                                                    <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
+                                                        {children}
+                                                    </table>
+                                                </div>
+                                            ),
+                                            th: ({ children }) => (
+                                                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold text-left">
+                                                    {children}
+                                                </th>
+                                            ),
+                                            td: ({ children }) => (
+                                                <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-800 dark:text-gray-300">
+                                                    {children}
+                                                </td>
+                                            ),
+                                            hr: () => (
+                                                <hr className="my-8 border-gray-300 dark:border-gray-700" />
+                                            ),
+                                            img: ({ src, alt }) => {
+                                                // XSS 방지: 안전한 이미지 URL만 허용
+                                                const isSafeUrl = src &&
+                                                    (src.startsWith('http://') ||
+                                                        src.startsWith('https://') ||
+                                                        src.startsWith('/'));
+
+                                                return isSafeUrl ? (
+                                                    <img
+                                                        src={src}
+                                                        alt={alt || '이미지'}
+                                                        className="rounded-lg shadow-lg my-4 max-w-full h-auto"
+                                                    />
+                                                ) : null;
+                                            },
+                                        }}
                                     >
                                         {editorData.markdown || '*여기에 미리보기가 표시됩니다*'}
                                     </ReactMarkdown>
