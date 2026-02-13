@@ -28,24 +28,7 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({
 
     const handleClick = (e: React.MouseEvent, id: string) => {
         e.preventDefault();
-        const element = document.getElementById(id);
-        if (element) {
-            // 헤더 높이(h-16 = 64px) 고려한 스크롤 오프셋
-            const headerOffset = 80;
-            const elementPosition = element.getBoundingClientRect().top;
-            const offsetPosition = elementPosition + window.scrollY - headerOffset;
-
-            // 스크롤 먼저 실행 (navigate가 스크롤을 덮어쓰지 않도록)
-            requestAnimationFrame(() => {
-                window.scrollTo({
-                    top: offsetPosition,
-                    behavior: 'smooth',
-                });
-            });
-            onItemClick?.(id); // 모바일: 드로어 닫기, URL hash 업데이트
-        } else {
-            onItemClick?.(id);
-        }
+        onItemClick?.(id); // 스크롤 및 URL 업데이트는 부모(handleTocItemClick)에서 처리
     };
 
     if (headings.length === 0) return null;

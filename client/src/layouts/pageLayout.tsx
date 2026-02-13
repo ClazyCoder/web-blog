@@ -67,6 +67,7 @@ const PageLayout: React.FC = () => {
     const [activeHeadingId, setActiveHeadingId] = useState<string>('');
     const [isMobileTocOpen, setIsMobileTocOpen] = useState(false);
     const headingElementsRef = useRef<Map<string, IntersectionObserverEntry>>(new Map());
+    const tocClickHandledRef = useRef(false);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -181,10 +182,14 @@ const PageLayout: React.FC = () => {
         };
     }, [headings]);
 
-    // Hash로 진입 시 해당 섹션으로 스크롤
+    // Hash로 진입 시 해당 섹션으로 스크롤 (TOC 클릭 시에는 handleTocItemClick에서 처리)
     useEffect(() => {
         const hash = location.hash.slice(1);
         if (!hash || headings.length === 0) return;
+        if (tocClickHandledRef.current) {
+            tocClickHandledRef.current = false;
+            return;
+        }
         const el = document.getElementById(hash);
         if (el) {
             const y = el.getBoundingClientRect().top + window.scrollY - 80;
@@ -226,9 +231,20 @@ const PageLayout: React.FC = () => {
     };
 
     const handleTocItemClick = useCallback((headingId: string) => {
+        tocClickHandledRef.current = true;
         setActiveHeadingId(headingId);
         setIsMobileTocOpen(false);
         navigate(`${location.pathname}#${headingId}`, { replace: true, preventScrollReset: true });
+        // navigate 직후 스크롤 (React Router 업데이트 이후 실행되도록 이중 rAF)
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                const el = document.getElementById(headingId);
+                if (el) {
+                    const y = el.getBoundingClientRect().top + window.scrollY - 80;
+                    window.scrollTo({ top: y, behavior: 'smooth' });
+                }
+            });
+        });
     }, [navigate, location.pathname]);
 
     if (loading) {
