@@ -96,16 +96,6 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
         window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
     };
 
-    const jumpToCurrentSection = () => {
-        if (!activeId) return;
-        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const activeElement = itemRefs.current.get(activeId);
-        activeElement?.scrollIntoView({
-            block: 'center',
-            behavior: prefersReducedMotion ? 'auto' : 'smooth',
-        });
-    };
-
     const handleClick = (e: React.MouseEvent, id: string) => {
         e.preventDefault();
         const element = document.getElementById(id);
@@ -234,15 +224,6 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
                             aria-pressed={showDeepHeadings}
                         >
                             {showDeepHeadings ? 'h3+ 접기' : 'h3+ 펼치기'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={jumpToCurrentSection}
-                            disabled={!activeId}
-                            className="rounded-md px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                            aria-label="현재 섹션 항목으로 이동"
-                        >
-                            현재 섹션
                         </button>
                     </div>
                     <button
