@@ -77,6 +77,7 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
     }, [activeId, parentMap]);
 
     React.useEffect(() => {
+        itemRefs.current.clear();
         setExpandedIds(new Set());
     }, [headings]);
 
@@ -224,7 +225,7 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
                         {headings.length}개 섹션
                     </span>
                 </div>
-                <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-1">
                         <button
                             type="button"
@@ -239,6 +240,7 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
                             onClick={jumpToCurrentSection}
                             disabled={!activeId}
                             className="rounded-md px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                            aria-label="현재 섹션 항목으로 이동"
                         >
                             현재 섹션
                         </button>

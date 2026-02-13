@@ -67,7 +67,7 @@ const PageLayout: React.FC = () => {
     const [activeHeadingId, setActiveHeadingId] = useState<string>('');
     const [isMobileTocOpen, setIsMobileTocOpen] = useState(false);
     const headingElementsRef = useRef<Map<string, IntersectionObserverEntry>>(new Map());
-    const tocClickHandledRef = useRef(false);
+    const lastTocNavigatedHashRef = useRef<string>('');
 
     useEffect(() => {
         const controller = new AbortController();
@@ -116,21 +116,17 @@ const PageLayout: React.FC = () => {
         return parseMarkdownHeadings(pageData.content);
     }, [pageData?.content]);
 
-    // heading ID 매칭용 ref
-    const usedIdsRef = useRef<Set<string>>(new Set());
-
-    // 콘텐츠/헤딩 변경 시 초기화 (렌더 중 mutation 방지)
-    useEffect(() => {
-        usedIdsRef.current = new Set();
-    }, [pageData?.content, headings]);
+    // 렌더마다 동일한 순서로 heading id를 재계산해 DOM id를 안정적으로 유지
+    const renderUsedIds = new Set<string>();
 
     // IntersectionObserver로 활성 헤딩 추적
     useEffect(() => {
         if (headings.length === 0) return;
+        const headingEntries = headingElementsRef.current;
 
         const callback: IntersectionObserverCallback = (entries) => {
             entries.forEach((entry) => {
-                headingElementsRef.current.set(entry.target.id, entry);
+                headingEntries.set(entry.target.id, entry);
             });
 
             // 단일 스캔으로 활성 헤딩 선택
@@ -139,7 +135,7 @@ const PageLayout: React.FC = () => {
             let largestNegativeTopId = '';
             let largestNegativeTop = Number.NEGATIVE_INFINITY;
 
-            headingElementsRef.current.forEach((entry) => {
+            headingEntries.forEach((entry) => {
                 if (!entry.isIntersecting) return;
 
                 const top = entry.boundingClientRect.top;
@@ -178,25 +174,36 @@ const PageLayout: React.FC = () => {
         return () => {
             cancelAnimationFrame(rafId);
             observer.disconnect();
-            headingElementsRef.current.clear();
+            headingEntries.clear();
         };
     }, [headings]);
 
-    // Hash로 진입 시 해당 섹션으로 스크롤 (TOC 클릭 시에는 handleTocItemClick에서 처리)
+    const scrollToHeadingByHash = useCallback((hash: string) => {
+        const el = document.getElementById(hash);
+        if (!el) return false;
+
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const y = el.getBoundingClientRect().top + window.scrollY - 80;
+        window.scrollTo({ top: y, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+        setActiveHeadingId(hash);
+        return true;
+    }, []);
+
+    // 해시 기반 진입/이동 동기화
     useEffect(() => {
         const hash = location.hash.slice(1);
         if (!hash || headings.length === 0) return;
-        if (tocClickHandledRef.current) {
-            tocClickHandledRef.current = false;
+
+        // TOC 클릭 직후의 동일 해시 변경은 이미 TableOfContents에서 스크롤했으므로 중복 스크롤 방지
+        if (lastTocNavigatedHashRef.current === hash) {
+            lastTocNavigatedHashRef.current = '';
+            setActiveHeadingId(hash);
             return;
         }
-        const el = document.getElementById(hash);
-        if (el) {
-            const y = el.getBoundingClientRect().top + window.scrollY - 80;
-            window.scrollTo({ top: y, behavior: 'smooth' });
-            setActiveHeadingId(hash);
-        }
-    }, [location.hash, headings]);
+
+        // 브라우저 뒤/앞 이동, 직접 URL 해시 진입 케이스 처리
+        scrollToHeadingByHash(hash);
+    }, [location.hash, headings, scrollToHeadingByHash]);
 
     const handleEdit = () => {
         if (pageData) {
@@ -231,11 +238,20 @@ const PageLayout: React.FC = () => {
     };
 
     const handleTocItemClick = useCallback((headingId: string) => {
-        tocClickHandledRef.current = true; // hash useEffect 스크롤 스킵 (TableOfContents에서 이미 스크롤)
+        const currentHash = location.hash.slice(1);
+
+        // 같은 해시를 다시 클릭한 경우에도 본문 스크롤을 강제해 UX를 일관되게 유지
+        if (currentHash === headingId) {
+            scrollToHeadingByHash(headingId);
+            setIsMobileTocOpen(false);
+            return;
+        }
+
+        lastTocNavigatedHashRef.current = headingId;
         setActiveHeadingId(headingId);
         setIsMobileTocOpen(false);
         navigate(`${location.pathname}#${headingId}`, { replace: true, preventScrollReset: true });
-    }, [navigate, location.pathname]);
+    }, [navigate, location.pathname, location.hash, scrollToHeadingByHash]);
 
     if (loading) {
         return (
@@ -330,7 +346,7 @@ const PageLayout: React.FC = () => {
                             components={{
                                 h1: ({ children }) => {
                                     const text = extractTextFromChildren(children);
-                                    const headingId = findHeadingId(text, 1, headings, usedIdsRef.current);
+                                    const headingId = findHeadingId(text, 1, headings, renderUsedIds);
                                     return (
                                         <h1 id={headingId} className="text-2xl sm:text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                             {children}
@@ -339,7 +355,7 @@ const PageLayout: React.FC = () => {
                                 },
                                 h2: ({ children }) => {
                                     const text = extractTextFromChildren(children);
-                                    const headingId = findHeadingId(text, 2, headings, usedIdsRef.current);
+                                    const headingId = findHeadingId(text, 2, headings, renderUsedIds);
                                     return (
                                         <h2 id={headingId} className="text-xl sm:text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                             {children}
@@ -348,7 +364,7 @@ const PageLayout: React.FC = () => {
                                 },
                                 h3: ({ children }) => {
                                     const text = extractTextFromChildren(children);
-                                    const headingId = findHeadingId(text, 3, headings, usedIdsRef.current);
+                                    const headingId = findHeadingId(text, 3, headings, renderUsedIds);
                                     return (
                                         <h3 id={headingId} className="text-lg sm:text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                             {children}
