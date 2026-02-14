@@ -89,10 +89,8 @@ services:
     restart: unless-stopped
     depends_on:
       - server
-    # CF Tunnel이 Docker 내부 네트워크로 접근하므로 호스트 포트 노출 불필요
-    # nginx-unprivileged 이미지 기본 포트: 8080
-    expose:
-      - "8080"
+    ports:
+      - "8080:8080"
     volumes:
       - uploads:/data/uploads:ro
 
