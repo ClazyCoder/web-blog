@@ -6,7 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import rehypeHighlight from 'rehype-highlight';
-import 'highlight.js/styles/github.css';
+import 'highlight.js/styles/github-dark-dimmed.css';
 import { useAuth } from '../context/AuthContext';
 import { setNavigationGuard, clearNavigationGuard } from '../utils/navigationGuard';
 import { UnauthorizedAccess, EditorSidebar } from '../components';
