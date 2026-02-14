@@ -39,6 +39,7 @@ const Admin: React.FC = () => {
     const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
     const [isCleaningUp, setIsCleaningUp] = useState(false);
     const [cleanupResult, setCleanupResult] = useState<string | null>(null);
+    const [brokenImageIds, setBrokenImageIds] = useState<Set<number>>(new Set());
 
     // 인증 안 된 경우 리다이렉트
     useEffect(() => {
@@ -240,17 +241,19 @@ const Admin: React.FC = () => {
                         >
                             {/* 이미지 미리보기 */}
                             <div className="aspect-video bg-gray-100 relative overflow-hidden">
-                                <img
-                                    src={image.file_url}
-                                    alt={image.original_filename}
-                                    className="w-full h-full object-contain"
-                                    loading="lazy"
-                                    onError={(e) => {
-                                        (e.target as HTMLImageElement).style.display = 'none';
-                                        (e.target as HTMLImageElement).parentElement!.innerHTML =
-                                            '<div class="flex items-center justify-center h-full text-gray-400 text-sm">미리보기 불가</div>';
-                                    }}
-                                />
+                                {brokenImageIds.has(image.id) ? (
+                                    <div className="flex items-center justify-center h-full text-gray-400 text-sm">미리보기 불가</div>
+                                ) : (
+                                    <img
+                                        src={image.file_url}
+                                        alt={image.original_filename}
+                                        className="w-full h-full object-contain"
+                                        loading="lazy"
+                                        onError={() => {
+                                            setBrokenImageIds(prev => new Set(prev).add(image.id));
+                                        }}
+                                    />
+                                )}
                             </div>
 
                             {/* 이미지 정보 */}

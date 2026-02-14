@@ -26,19 +26,20 @@ ENV VITE_ADMIN_EMAIL=$VITE_ADMIN_EMAIL
 RUN npm run build
 
 # ============================================
-# Stage 2: Serve with nginx
+# Stage 2: Serve with nginx (non-root)
 # ============================================
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:alpine
 
 # nginx 설정 복사
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# 빌드 결과물 복사
+# 빌드 결과물 복사 (root로 전환 후 권한 설정)
+USER root
 COPY --from=build /app/dist /usr/share/nginx/html
+RUN mkdir -p /data/uploads && \
+    chown -R nginx:nginx /usr/share/nginx/html /data/uploads
+USER nginx
 
-# uploads 정적 서빙을 위한 디렉토리 생성
-RUN mkdir -p /data/uploads
-
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]

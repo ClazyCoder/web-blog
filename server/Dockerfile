@@ -28,6 +28,12 @@ RUN mkdir -p uploads/images
 # entrypoint 실행 권한 부여
 RUN chmod +x entrypoint.sh
 
+# non-root 사용자로 실행
+RUN groupadd --gid 1001 appuser && \
+    useradd --uid 1001 --gid appuser --no-create-home appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
 
 ENTRYPOINT ["./entrypoint.sh"]

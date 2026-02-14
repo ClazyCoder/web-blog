@@ -12,7 +12,13 @@ import uuid
 import os
 
 # 환경 변수에서 읽기
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+_secret_key = os.getenv("SECRET_KEY")
+if not _secret_key:
+    raise RuntimeError(
+        "SECRET_KEY 환경변수가 설정되지 않았습니다. "
+        "보안을 위해 반드시 안전한 키를 설정해 주세요."
+    )
+SECRET_KEY = _secret_key
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7  # 로그인 유지 시 리프레시 토큰 만료 (7일)
@@ -68,9 +74,10 @@ def init_admin_user():
     admin_password = os.getenv("ADMIN_PASSWORD")
 
     if not admin_password:
-        # 개발 환경용 기본값
-        print("⚠️  WARNING: ADMIN_PASSWORD not set in environment. Using default 'admin' password.")
-        admin_password = "admin"
+        raise RuntimeError(
+            "ADMIN_PASSWORD 환경변수가 설정되지 않았습니다. "
+            "보안을 위해 반드시 관리자 비밀번호를 설정해 주세요."
+        )
 
     ADMIN_PASSWORD_HASH = get_password_hash(admin_password)
 

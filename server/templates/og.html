@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ title }} - {{ site_name }}</title>
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="{{ title }}" />
+    <meta property="og:description" content="{{ description }}" />
+    <meta property="og:url" content="{{ url }}" />
+    <meta property="og:site_name" content="{{ site_name }}" />
+    {% if image %}
+    <meta property="og:image" content="{{ image }}" />
+    <meta name="twitter:image" content="{{ image }}" />
+    {% endif %}
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="{{ twitter_card }}" />
+    <meta name="twitter:title" content="{{ title }}" />
+    <meta name="twitter:description" content="{{ description }}" />
+
+    <!-- Standard Meta -->
+    <meta name="description" content="{{ description }}" />
+
+    <!-- Redirect to actual page for non-bot visitors -->
+    <meta http-equiv="refresh" content="0;url={{ url }}" />
+</head>
+<body>
+    <p><a href="{{ url }}">{{ title }}</a></p>
+</body>
+</html>
