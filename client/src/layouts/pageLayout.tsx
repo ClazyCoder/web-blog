@@ -6,6 +6,8 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import rehypeHighlight from 'rehype-highlight';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import 'highlight.js/styles/github-dark-dimmed.css';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
@@ -380,7 +382,14 @@ const PageLayout: React.FC = () => {
                     <div className="max-w-none markdown-content">
                         <ReactMarkdown
                             remarkPlugins={[remarkMath, remarkGfm]}
-                            rehypePlugins={[rehypeKatex, rehypeHighlight]}
+                            rehypePlugins={[rehypeRaw, [rehypeSanitize, {
+                                ...defaultSchema,
+                                tagNames: [...(defaultSchema.tagNames || []), 'br', 'hr', 'sub', 'sup', 'mark', 'abbr', 'details', 'summary'],
+                                attributes: {
+                                    ...defaultSchema.attributes,
+                                    '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'id'],
+                                },
+                            }], rehypeKatex, rehypeHighlight]}
                             components={{
                                 h1: ({ children }) => {
                                     const text = extractTextFromChildren(children);
