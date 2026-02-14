@@ -173,7 +173,7 @@ const ListLayout: React.FC = () => {
                 <div className="mb-8">
                     <div className="flex items-center justify-between mb-6">
                         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                            게시판
+                            모든 게시글
                         </h1>
                         {isAuthenticated && (
                             <button
@@ -224,11 +224,10 @@ const ListLayout: React.FC = () => {
                                     <button
                                         key={tag}
                                         onClick={() => handleTagToggle(tag)}
-                                        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-                                            isSelected
-                                                ? 'bg-emerald-600 text-white shadow-sm'
-                                                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                                        }`}
+                                        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${isSelected
+                                            ? 'bg-emerald-600 text-white shadow-sm'
+                                            : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                                            }`}
                                     >
                                         {tag}
                                     </button>
@@ -346,11 +345,10 @@ const ListLayout: React.FC = () => {
                                 <button
                                     key={page}
                                     onClick={() => setCurrentPage(page)}
-                                    className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                        currentPage === page
-                                            ? 'bg-emerald-600 text-white shadow-md'
-                                            : 'text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                                    }`}
+                                    className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${currentPage === page
+                                        ? 'bg-emerald-600 text-white shadow-md'
+                                        : 'text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}
                                 >
                                     {page}
                                 </button>

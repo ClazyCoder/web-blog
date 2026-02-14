@@ -53,7 +53,7 @@ const BoardLayout: React.FC = () => {
             <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-6 sm:py-8">
                 <div className="container mx-auto px-4">
                     <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-gray-900 dark:text-white">
-                        게시글
+                        최근 작성글
                     </h1>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                         {[...Array(6)].map((_, i) => (
