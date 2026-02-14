@@ -14,7 +14,7 @@ root.render(
     <React.StrictMode>
         <BrowserRouter>
             <AuthProvider>
-                <div className="min-h-screen flex flex-col">
+                <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
                     <Layouts.Header />
                     <App />
                     <Layouts.Footer />

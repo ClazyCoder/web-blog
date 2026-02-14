@@ -6,7 +6,9 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import rehypeHighlight from 'rehype-highlight';
-import 'highlight.js/styles/github.css';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import 'highlight.js/styles/github-dark-dimmed.css';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import { parseMarkdownHeadings, extractTextFromChildren, slugifyHeadingText } from '../utils/tocParser';
@@ -257,10 +259,43 @@ const PageLayout: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600 dark:text-gray-400">로딩 중...</p>
+            <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+                <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 xl:flex xl:gap-8">
+                    <div className="flex-1 min-w-0 max-w-4xl">
+                        {/* 제목 스켈레톤 */}
+                        <div className="mb-6 sm:mb-8">
+                            <div className="h-9 skeleton-shimmer rounded-lg w-3/4 mb-4" />
+                            <div className="flex gap-4 mb-4">
+                                <div className="h-4 skeleton-shimmer rounded w-24" />
+                                <div className="h-4 skeleton-shimmer rounded w-16" />
+                            </div>
+                            <div className="flex gap-2">
+                                <div className="h-6 skeleton-shimmer rounded-full w-16" />
+                                <div className="h-6 skeleton-shimmer rounded-full w-20" />
+                            </div>
+                        </div>
+                        {/* 본문 스켈레톤 */}
+                        <div className="space-y-4">
+                            <div className="h-4 skeleton-shimmer rounded w-full" />
+                            <div className="h-4 skeleton-shimmer rounded w-5/6" />
+                            <div className="h-4 skeleton-shimmer rounded w-full" />
+                            <div className="h-4 skeleton-shimmer rounded w-4/6" />
+                            <div className="h-40 skeleton-shimmer rounded-lg w-full mt-6" />
+                            <div className="h-4 skeleton-shimmer rounded w-full" />
+                            <div className="h-4 skeleton-shimmer rounded w-3/4" />
+                        </div>
+                    </div>
+                    {/* 사이드바 스켈레톤 */}
+                    <aside className="hidden xl:block w-64 shrink-0">
+                        <div className="sticky top-20 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                            <div className="h-4 skeleton-shimmer rounded w-1/2" />
+                            <div className="h-3 skeleton-shimmer rounded w-3/4 ml-3" />
+                            <div className="h-3 skeleton-shimmer rounded w-2/3 ml-3" />
+                            <div className="h-3 skeleton-shimmer rounded w-3/4 ml-6" />
+                            <div className="h-4 skeleton-shimmer rounded w-1/2" />
+                            <div className="h-3 skeleton-shimmer rounded w-2/3 ml-3" />
+                        </div>
+                    </aside>
                 </div>
             </div>
         );
@@ -287,7 +322,7 @@ const PageLayout: React.FC = () => {
 
             <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 xl:flex xl:gap-8">
                 {/* 메인 콘텐츠 영역 */}
-                <article className="flex-1 min-w-0 max-w-4xl">
+                <article className="flex-1 min-w-0 max-w-4xl animate-fade-in-up">
                     {/* 헤더 섹션 */}
                     <header className="mb-6 sm:mb-8">
                         <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">
@@ -347,7 +382,14 @@ const PageLayout: React.FC = () => {
                     <div className="max-w-none markdown-content">
                         <ReactMarkdown
                             remarkPlugins={[remarkMath, remarkGfm]}
-                            rehypePlugins={[rehypeKatex, rehypeHighlight]}
+                            rehypePlugins={[rehypeRaw, [rehypeSanitize, {
+                                ...defaultSchema,
+                                tagNames: [...(defaultSchema.tagNames || []), 'br', 'hr', 'sub', 'sup', 'mark', 'abbr', 'details', 'summary'],
+                                attributes: {
+                                    ...defaultSchema.attributes,
+                                    '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'id'],
+                                },
+                            }], rehypeKatex, rehypeHighlight]}
                             components={{
                                 h1: ({ children }) => {
                                     const text = extractTextFromChildren(children);
@@ -461,7 +503,8 @@ const PageLayout: React.FC = () => {
                                     <img
                                         src={src}
                                         alt={alt}
-                                        className="rounded-lg shadow-lg my-4 max-w-full h-auto"
+                                        loading="lazy"
+                                        className="rounded-lg shadow-lg my-4 max-w-full h-auto animate-fade-in"
                                     />
                                 ),
                             }}
@@ -486,8 +529,8 @@ const PageLayout: React.FC = () => {
 
                 {/* 데스크톱 사이드바 TOC (xl 이상) */}
                 {headings.length > 0 && (
-                    <aside className="hidden xl:block w-64 shrink-0">
-                        <div className="sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+                    <aside className="hidden xl:block w-64 shrink-0 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+                        <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
                             <TableOfContents
                                 headings={headings}
                                 activeId={activeHeadingId}

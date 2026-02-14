@@ -4,19 +4,40 @@
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from typing import AsyncGenerator
+from urllib.parse import quote_plus
 import os
 from dotenv import load_dotenv
 
 # 환경 변수 로드
 load_dotenv()
 
-# 데이터베이스 URL 가져오기
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./blog.db")
 
-# PostgreSQL의 경우 postgresql+asyncpg:// 형식 사용
-if DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace(
-        "postgresql://", "postgresql+asyncpg://", 1)
+def _build_database_url() -> str:
+    """개별 DB 환경변수 또는 DATABASE_URL에서 접속 URL을 생성한다.
+
+    개별 파라미터(DB_HOST 등)가 모두 있으면 quote_plus로 안전하게 조립하고,
+    없으면 DATABASE_URL 환경변수를 그대로 사용한다 (개발 환경 호환).
+    """
+    db_host = os.getenv("DB_HOST")
+    db_user = os.getenv("DB_USER")
+    db_password = os.getenv("DB_PASSWORD")
+    db_name = os.getenv("DB_NAME")
+    db_port = os.getenv("DB_PORT", "5432")
+
+    if db_host and db_user and db_password is not None and db_name:
+        return (
+            f"postgresql+asyncpg://"
+            f"{quote_plus(db_user)}:{quote_plus(db_password)}"
+            f"@{db_host}:{db_port}/{db_name}"
+        )
+
+    url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./blog.db")
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
+DATABASE_URL = _build_database_url()
 
 # 비동기 엔진 생성
 engine = create_async_engine(

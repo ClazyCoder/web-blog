@@ -5,10 +5,11 @@ Open Graph 메타태그 제공 라우터
 
 import os
 import re
-from html import escape
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -22,6 +23,10 @@ router = APIRouter(
 )
 
 SITE_NAME = os.getenv("SITE_NAME", "YSG Blog")
+
+templates = Jinja2Templates(
+    directory=Path(__file__).resolve().parent.parent / "templates"
+)
 
 
 def strip_markdown(text: str, max_length: int = 200) -> str:
@@ -64,7 +69,8 @@ def _get_site_url(request: Request) -> str:
     return f"{proto}://{host}"
 
 
-def _build_og_html(
+def _render_og_html(
+    request: Request,
     *,
     title: str,
     description: str,
@@ -72,51 +78,21 @@ def _build_og_html(
     image: str | None = None,
     site_name: str = SITE_NAME,
 ) -> str:
-    """OG 메타태그가 포함된 최소한의 HTML 페이지 생성"""
-    t = escape(title)
-    d = escape(description)
-    u = escape(url)
-    s = escape(site_name)
-
-    image_tags = ""
-    if image:
-        img = escape(image)
-        image_tags = (
-            f'\n    <meta property="og:image" content="{img}" />'
-            f'\n    <meta name="twitter:image" content="{img}" />'
-        )
-
+    """Jinja2 템플릿으로 OG 메타태그 HTML 렌더링 (자동 이스케이프 적용)"""
     twitter_card = "summary_large_image" if image else "summary"
-
-    return f"""<!doctype html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{t} - {s}</title>
-
-    <!-- Open Graph -->
-    <meta property="og:type" content="article" />
-    <meta property="og:title" content="{t}" />
-    <meta property="og:description" content="{d}" />
-    <meta property="og:url" content="{u}" />
-    <meta property="og:site_name" content="{s}" />{image_tags}
-
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="{twitter_card}" />
-    <meta name="twitter:title" content="{t}" />
-    <meta name="twitter:description" content="{d}" />
-
-    <!-- Standard Meta -->
-    <meta name="description" content="{d}" />
-
-    <!-- Redirect to actual page for non-bot visitors -->
-    <meta http-equiv="refresh" content="0;url={u}" />
-</head>
-<body>
-    <p><a href="{u}">{t}</a></p>
-</body>
-</html>"""
+    response = templates.TemplateResponse(
+        request=request,
+        name="og.html",
+        context={
+            "title": title,
+            "description": description,
+            "url": url,
+            "image": image,
+            "site_name": site_name,
+            "twitter_card": twitter_card,
+        },
+    )
+    return response.body.decode()
 
 
 @router.get("/board/{post_id}", response_class=HTMLResponse)
@@ -143,7 +119,8 @@ async def get_og_page(
 
     if not post:
         return HTMLResponse(
-            content=_build_og_html(
+            content=_render_og_html(
+                request,
                 title=SITE_NAME,
                 description="페이지를 찾을 수 없습니다.",
                 url=site_url,
@@ -164,7 +141,8 @@ async def get_og_page(
         thumbnail = f"{site_url}/android-chrome-512x512.png"
 
     return HTMLResponse(
-        content=_build_og_html(
+        content=_render_og_html(
+            request,
             title=post.title,
             description=description,
             url=post_url,

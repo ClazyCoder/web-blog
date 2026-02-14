@@ -168,17 +168,22 @@ const ListLayout: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-            <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="max-w-5xl mx-auto px-4 py-8">
                 {/* 헤더 */}
-                <div className="mb-8">
+                <div className="mb-8 animate-fade-in-up">
                     <div className="flex items-center justify-between mb-6">
-                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                            게시판
-                        </h1>
+                        <div>
+                            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                                모든 게시글
+                            </h1>
+                            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                총 {totalPosts}개의 게시글
+                            </p>
+                        </div>
                         {isAuthenticated && (
                             <button
                                 onClick={handleWriteClick}
-                                className="flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors shadow-md"
+                                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -195,10 +200,10 @@ const ListLayout: React.FC = () => {
                             value={searchTerm}
                             onChange={(e) => handleSearchChange(e.target.value)}
                             placeholder="검색어를 입력하세요..."
-                            className="w-full px-4 py-2.5 pl-10 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
+                            className="w-full px-4 py-3 pl-11 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900 dark:text-white shadow-sm transition-shadow duration-200 focus:shadow-md"
                         />
                         <svg
-                            className="absolute left-3 top-3 w-5 h-5 text-gray-400"
+                            className="absolute left-3.5 top-3.5 w-5 h-5 text-gray-400"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -224,11 +229,10 @@ const ListLayout: React.FC = () => {
                                     <button
                                         key={tag}
                                         onClick={() => handleTagToggle(tag)}
-                                        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-                                            isSelected
-                                                ? 'bg-emerald-600 text-white shadow-sm'
-                                                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                                        }`}
+                                        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ${isSelected
+                                            ? 'bg-emerald-600 text-white shadow-sm scale-105'
+                                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                            }`}
                                     >
                                         {tag}
                                     </button>
@@ -238,100 +242,86 @@ const ListLayout: React.FC = () => {
                     )}
                 </div>
 
-                {/* 게시글 목록 */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-                    {/* 테이블 헤더 (데스크톱) */}
-                    <div className="hidden md:grid md:grid-cols-12 gap-4 px-6 py-4 bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 font-semibold text-gray-700 dark:text-gray-300 text-sm">
-                        <div className="col-span-7">제목</div>
-                        <div className="col-span-3">작성일</div>
-                        <div className="col-span-2 text-center">조회수</div>
-                    </div>
-
-                    {/* 게시글 리스트 */}
+                {/* 게시글 목록 — 카드 스타일 */}
+                <div className="space-y-3">
                     {loading ? (
-                        <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {[...Array(5)].map((_, i) => (
-                                <div key={i} className="px-6 py-4 animate-pulse">
-                                    <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2" />
-                                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
-                                </div>
-                            ))}
-                        </div>
-                    ) : posts.length === 0 ? (
-                        <div className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-                            <svg className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <p className="text-lg font-medium">검색 결과가 없습니다</p>
-                            <p className="text-sm mt-1">다른 검색어나 태그를 시도해보세요</p>
-                        </div>
-                    ) : (
-                        <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {posts.map((post) => (
-                                <div
-                                    key={post.id}
-                                    onClick={() => handlePostClick(post.id)}
-                                    className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition-colors"
-                                >
-                                    {/* 데스크톱 레이아웃 */}
-                                    <div className="hidden md:grid md:grid-cols-12 gap-4 items-center">
-                                        <div className="col-span-7">
-                                            <h3 className="font-medium text-gray-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 line-clamp-1">
-                                                {post.title}
-                                            </h3>
-                                            <div className="flex gap-2 mt-1">
-                                                {post.tags.map(tag => (
-                                                    <span
-                                                        key={tag}
-                                                        className="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded"
-                                                    >
-                                                        {tag}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div className="col-span-3 text-gray-600 dark:text-gray-400 text-sm">
-                                            {formatDate(post.created_at)}
-                                        </div>
-                                        <div className="col-span-2 text-center text-gray-600 dark:text-gray-400 text-sm">
-                                            {post.view_count}
+                        // 스켈레톤 로딩
+                        [...Array(5)].map((_, i) => (
+                            <div key={i} className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700/50">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex-1 space-y-2.5">
+                                        <div className="h-5 skeleton-shimmer rounded-lg w-3/4" />
+                                        <div className="flex gap-2">
+                                            <div className="h-5 skeleton-shimmer rounded-full w-14" />
+                                            <div className="h-5 skeleton-shimmer rounded-full w-18" />
                                         </div>
                                     </div>
-
-                                    {/* 모바일 레이아웃 */}
-                                    <div className="md:hidden">
-                                        <h3 className="font-medium text-gray-900 dark:text-white mb-2">
+                                    <div className="h-4 skeleton-shimmer rounded w-20 shrink-0" />
+                                </div>
+                            </div>
+                        ))
+                    ) : posts.length === 0 ? (
+                        <div className="py-16 text-center animate-fade-in">
+                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
+                                <svg className="w-8 h-8 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                            <p className="text-lg font-medium text-gray-700 dark:text-gray-300">검색 결과가 없습니다</p>
+                            <p className="text-sm mt-1 text-gray-500 dark:text-gray-400">다른 검색어나 태그를 시도해보세요</p>
+                        </div>
+                    ) : (
+                        posts.map((post, index) => (
+                            <div
+                                key={post.id}
+                                onClick={() => handlePostClick(post.id)}
+                                className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700/50 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-emerald-200 dark:hover:border-emerald-800 hover:-translate-y-0.5 animate-fade-in-up"
+                                style={{ animationDelay: `${index * 50}ms` }}
+                            >
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="font-semibold text-gray-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-1 text-[15px]">
                                             {post.title}
                                         </h3>
-                                        <div className="flex flex-wrap gap-2 mb-2">
+
+                                        {/* 태그 */}
+                                        <div className="flex flex-wrap items-center gap-2 mt-2">
                                             {post.tags.map(tag => (
                                                 <span
                                                     key={tag}
-                                                    className="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded"
+                                                    className="text-xs px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 rounded-full font-medium"
                                                 >
                                                     {tag}
                                                 </span>
                                             ))}
                                         </div>
-                                        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-                                            <span>{formatDate(post.created_at)}</span>
-                                            <span>조회 {post.view_count}</span>
-                                        </div>
+                                    </div>
+
+                                    {/* 날짜 + 조회수 */}
+                                    <div className="flex flex-col items-end gap-1 shrink-0 text-xs text-gray-400 dark:text-gray-500">
+                                        <span>{formatDate(post.created_at)}</span>
+                                        <span className="flex items-center gap-1">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                            </svg>
+                                            {post.view_count}
+                                        </span>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        ))
                     )}
                 </div>
 
                 {/* 페이지네이션 */}
                 {!loading && totalPages > 1 && (
-                    <div className="mt-6 flex items-center justify-center gap-1">
+                    <div className="mt-8 flex items-center justify-center gap-1.5 animate-fade-in">
                         {/* 이전 버튼 */}
                         <button
                             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                             disabled={currentPage === 1}
-                            className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                             이전
                         </button>
@@ -339,18 +329,17 @@ const ListLayout: React.FC = () => {
                         {/* 페이지 번호 */}
                         {getPageNumbers().map((page, idx) =>
                             page === '...' ? (
-                                <span key={`ellipsis-${idx}`} className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
-                                    ...
+                                <span key={`ellipsis-${idx}`} className="px-2 py-2 text-sm text-gray-400 dark:text-gray-500">
+                                    ···
                                 </span>
                             ) : (
                                 <button
                                     key={page}
                                     onClick={() => setCurrentPage(page)}
-                                    className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                        currentPage === page
-                                            ? 'bg-emerald-600 text-white shadow-md'
-                                            : 'text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                                    }`}
+                                    className={`w-9 h-9 text-sm font-medium rounded-lg transition-all duration-200 ${currentPage === page
+                                        ? 'bg-emerald-600 text-white shadow-md scale-105'
+                                        : 'text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}
                                 >
                                     {page}
                                 </button>
@@ -361,7 +350,7 @@ const ListLayout: React.FC = () => {
                         <button
                             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                             disabled={currentPage === totalPages}
-                            className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                             다음
                         </button>
@@ -369,10 +358,11 @@ const ListLayout: React.FC = () => {
                 )}
 
                 {/* 하단 정보 */}
-                <div className="mt-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                    총 {totalPosts}개의 게시글
-                    {totalPages > 1 && ` (${currentPage} / ${totalPages} 페이지)`}
-                </div>
+                {!loading && totalPages > 1 && (
+                    <div className="mt-3 text-center text-sm text-gray-400 dark:text-gray-500">
+                        {currentPage} / {totalPages} 페이지
+                    </div>
+                )}
             </div>
         </div>
     );

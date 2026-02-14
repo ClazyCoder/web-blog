@@ -1,5 +1,6 @@
 import asyncio
 from logging.config import fileConfig
+from urllib.parse import quote_plus
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -21,14 +22,29 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-db_url = os.getenv("DATABASE_URL")
-if db_url:
+# 개별 DB 환경변수에서 URL-safe 접속 문자열 생성
+db_host = os.getenv("DB_HOST")
+db_user = os.getenv("DB_USER")
+db_password = os.getenv("DB_PASSWORD")
+db_name = os.getenv("DB_NAME")
+db_port = os.getenv("DB_PORT", "5432")
+
+if db_host and db_user and db_password is not None and db_name:
+    db_url = (
+        f"postgresql+asyncpg://"
+        f"{quote_plus(db_user)}:{quote_plus(db_password)}"
+        f"@{db_host}:{db_port}/{db_name}"
+    )
+else:
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise ValueError(
+            "DATABASE_URL or DB_HOST/DB_USER/DB_PASSWORD/DB_NAME must be set")
     # PostgreSQL의 경우 asyncpg 드라이버 형식으로 변환
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    config.set_main_option("sqlalchemy.url", db_url)
-else:
-    raise ValueError("DATABASE_URL is not set")
+
+config.set_main_option("sqlalchemy.url", db_url)
 
 # add your model's MetaData object here
 # for 'autogenerate' support

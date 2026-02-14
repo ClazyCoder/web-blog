@@ -47,8 +47,10 @@ def validate_image(file: UploadFile) -> bool:
     if not file.filename:
         return False
 
-    # XSS 방지: 파일명에 위험한 문자 체크
-    if '..' in file.filename or '/' in file.filename or '\\' in file.filename:
+    # 경로 탐색 방지: resolve() 후 UPLOAD_DIR 하위인지 검증
+    safe_name = sanitize_filename(file.filename)
+    resolved = (UPLOAD_DIR / safe_name).resolve()
+    if not resolved.is_relative_to(UPLOAD_DIR.resolve()):
         return False
 
     # 파일 확장자 체크
@@ -286,9 +288,9 @@ async def get_temp_image_info(
     """
     임시 이미지 정보 조회 (파일명으로)
     """
-    # DB에서 이미지 정보 조회 (storage_key에서 파일명 매칭)
+    # DB에서 이미지 정보 조회 (storage_key 정확 매칭)
     stmt = select(Image).filter(
-        Image.storage_key.like(f"%{filename}"),
+        Image.storage_key == f"images/{filename}",
         Image.deleted_at.is_(None)
     )
     result = await db.execute(stmt)
@@ -315,8 +317,8 @@ async def delete_image(
         current_user: 현재 로그인한 사용자 (JWT 검증)
         db: 비동기 데이터베이스 세션
     """
-    # DB에서 이미지 정보 조회
-    stmt = select(Image).filter(Image.storage_key.like(f"%{filename}"))
+    # DB에서 이미지 정보 조회 (storage_key 정확 매칭)
+    stmt = select(Image).filter(Image.storage_key == f"images/{filename}")
     result = await db.execute(stmt)
     image = result.scalar_one_or_none()
 

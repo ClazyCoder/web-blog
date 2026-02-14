@@ -6,7 +6,9 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import rehypeHighlight from 'rehype-highlight';
-import 'highlight.js/styles/github.css';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import 'highlight.js/styles/github-dark-dimmed.css';
 import { useAuth } from '../context/AuthContext';
 import { setNavigationGuard, clearNavigationGuard } from '../utils/navigationGuard';
 import { UnauthorizedAccess, EditorSidebar } from '../components';
@@ -400,6 +402,7 @@ const EditorLayout: React.FC = () => {
         if (!textarea) return;
 
         const start = textarea.selectionStart;
+        const scrollTop = textarea.scrollTop; // 스크롤 위치 저장
         const imageMarkdown = `![${altText}](${imageUrl})\n`;
 
         // 함수형 업데이트를 사용하여 최신 상태를 참조
@@ -412,11 +415,12 @@ const EditorLayout: React.FC = () => {
             return { ...prevData, markdown: newMarkdown };
         });
 
-        // 커서 위치 조정
+        // 커서 위치 및 스크롤 위치 복원
         setTimeout(() => {
             textarea.focus();
             const newPosition = start + imageMarkdown.length;
             textarea.setSelectionRange(newPosition, newPosition);
+            textarea.scrollTop = scrollTop;
         }, 0);
     };
 
@@ -1004,7 +1008,14 @@ const EditorLayout: React.FC = () => {
                                 <div className="markdown-content">
                                     <ReactMarkdown
                                         remarkPlugins={[remarkMath, remarkGfm]}
-                                        rehypePlugins={[rehypeKatex, rehypeHighlight]}
+                                        rehypePlugins={[rehypeRaw, [rehypeSanitize, {
+                                            ...defaultSchema,
+                                            tagNames: [...(defaultSchema.tagNames || []), 'br', 'hr', 'sub', 'sup', 'mark', 'abbr', 'details', 'summary'],
+                                            attributes: {
+                                                ...defaultSchema.attributes,
+                                                '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'id'],
+                                            },
+                                        }], rehypeKatex, rehypeHighlight]}
                                         components={{
                                             h1: ({ children }) => (
                                                 <h1 className="text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100">
