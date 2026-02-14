@@ -30,15 +30,9 @@ RUN npm run build
 # ============================================
 FROM nginxinc/nginx-unprivileged:alpine
 
-# nginx 설정 복사
+# nginx 설정 및 빌드 결과물 복사
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# 빌드 결과물 복사 (root로 전환 후 권한 설정)
-USER root
-COPY --from=build /app/dist /usr/share/nginx/html
-RUN mkdir -p /data/uploads && \
-    chown -R nginx:nginx /usr/share/nginx/html /data/uploads
-USER nginx
+COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 
 EXPOSE 8080
 
