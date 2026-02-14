@@ -313,3 +313,6 @@ venv/
 
 # uv cache
 .uv_cache/
+
+# AI
+CLAUDE.md
