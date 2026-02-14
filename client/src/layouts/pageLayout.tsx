@@ -285,7 +285,7 @@ const PageLayout: React.FC = () => {
                     </div>
                     {/* 사이드바 스켈레톤 */}
                     <aside className="hidden xl:block w-64 shrink-0">
-                        <div className="sticky top-8 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                        <div className="sticky top-20 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 space-y-3">
                             <div className="h-4 skeleton-shimmer rounded w-1/2" />
                             <div className="h-3 skeleton-shimmer rounded w-3/4 ml-3" />
                             <div className="h-3 skeleton-shimmer rounded w-2/3 ml-3" />
@@ -521,7 +521,7 @@ const PageLayout: React.FC = () => {
                 {/* 데스크톱 사이드바 TOC (xl 이상) */}
                 {headings.length > 0 && (
                     <aside className="hidden xl:block w-64 shrink-0 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-                        <div className="sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+                        <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
                             <TableOfContents
                                 headings={headings}
                                 activeId={activeHeadingId}
