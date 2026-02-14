@@ -402,6 +402,7 @@ const EditorLayout: React.FC = () => {
         if (!textarea) return;
 
         const start = textarea.selectionStart;
+        const scrollTop = textarea.scrollTop; // 스크롤 위치 저장
         const imageMarkdown = `![${altText}](${imageUrl})\n`;
 
         // 함수형 업데이트를 사용하여 최신 상태를 참조
@@ -414,11 +415,12 @@ const EditorLayout: React.FC = () => {
             return { ...prevData, markdown: newMarkdown };
         });
 
-        // 커서 위치 조정
+        // 커서 위치 및 스크롤 위치 복원
         setTimeout(() => {
             textarea.focus();
             const newPosition = start + imageMarkdown.length;
             textarea.setSelectionRange(newPosition, newPosition);
+            textarea.scrollTop = scrollTop;
         }, 0);
     };
 
