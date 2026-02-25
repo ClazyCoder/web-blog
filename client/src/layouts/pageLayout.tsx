@@ -31,6 +31,75 @@ interface PostData {
     published_at: string | null;
 }
 
+const extractCodeText = (node: React.ReactNode): string => {
+    if (node == null) return '';
+    if (typeof node === 'string' || typeof node === 'number') return String(node);
+    if (Array.isArray(node)) return node.map(extractCodeText).join('');
+    if (React.isValidElement(node)) {
+        return extractCodeText((node.props as { children?: React.ReactNode }).children);
+    }
+    return '';
+};
+
+const MarkdownCodeBlock: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [copied, setCopied] = useState(false);
+    const copiedTimerRef = useRef<number | null>(null);
+
+    const codeText = useMemo(() => extractCodeText(children), [children]);
+
+    useEffect(() => {
+        return () => {
+            if (copiedTimerRef.current) {
+                window.clearTimeout(copiedTimerRef.current);
+            }
+        };
+    }, []);
+
+    const handleCopy = async () => {
+        if (!codeText.trim()) return;
+
+        try {
+            await navigator.clipboard.writeText(codeText);
+            setCopied(true);
+
+            if (copiedTimerRef.current) {
+                window.clearTimeout(copiedTimerRef.current);
+            }
+
+            copiedTimerRef.current = window.setTimeout(() => {
+                setCopied(false);
+            }, 1400);
+        } catch (err) {
+            console.error('코드 복사 실패:', err);
+        }
+    };
+
+    return (
+        <div className="group relative my-4">
+            <button
+                type="button"
+                onClick={handleCopy}
+                className="absolute right-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-500/40 bg-gray-700/80 text-gray-100 backdrop-blur transition-opacity duration-150 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 hover:bg-gray-600 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                aria-label={copied ? '코드 복사 완료' : '코드 복사'}
+                title={copied ? '복사됨' : '코드 복사'}
+            >
+                {copied ? (
+                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.414l-7.2 7.2a1 1 0 01-1.415 0l-3.2-3.2a1 1 0 111.414-1.414l2.493 2.493 6.493-6.493a1 1 0 011.415 0z" clipRule="evenodd" />
+                    </svg>
+                ) : (
+                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path d="M6 2a2 2 0 00-2 2v1H3a2 2 0 00-2 2v8a2 2 0 002 2h7a2 2 0 002-2v-1h1a2 2 0 002-2V7.414a2 2 0 00-.586-1.414l-3.414-3.414A2 2 0 0010.586 2H6zm5 2.414L13.586 7H11V4.414zM10 4v4a1 1 0 001 1h3v6h-2V7a2 2 0 00-2-2H6V4h4z" />
+                    </svg>
+                )}
+            </button>
+            <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 pr-16 rounded-lg overflow-x-auto">
+                {children}
+            </pre>
+        </div>
+    );
+};
+
 /**
  * headings 배열에서 텍스트에 해당하는 slug를 찾아 반환
  * 동일 텍스트가 여러 번 등장할 경우 순서대로 매칭하기 위해 usedIds Set을 활용
@@ -457,9 +526,7 @@ const PageLayout: React.FC = () => {
                                     );
                                 },
                                 pre: ({ children }) => (
-                                    <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto my-4">
-                                        {children}
-                                    </pre>
+                                    <MarkdownCodeBlock>{children}</MarkdownCodeBlock>
                                 ),
                                 blockquote: ({ children }) => (
                                     <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-700 dark:text-gray-400 my-4">
