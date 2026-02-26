@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import useDebounce from '../hooks/useDebounce';
@@ -19,7 +19,41 @@ interface Post {
     published_at: string | null;
 }
 
+interface TagCount {
+    tag: string;
+    count: number;
+}
+
 const POSTS_PER_PAGE = 10;
+const TAG_FILTER_DEBOUNCE_MS = 200;
+const RECENT_TAGS_STORAGE_KEY = 'listLayoutRecentTags';
+const RECENT_TAGS_MAX = 10;
+const TAG_VIRTUAL_THRESHOLD = 40;
+const TAG_VIRTUAL_ROW_HEIGHT = 34;
+const TAG_VIRTUAL_VIEWPORT_HEIGHT = 220;
+const TAG_VIRTUAL_OVERSCAN = 5;
+
+const mergeUniqueTags = (...groups: string[][]) => {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+
+    groups.forEach(group => {
+        group.forEach(tag => {
+            if (!seen.has(tag)) {
+                seen.add(tag);
+                merged.push(tag);
+            }
+        });
+    });
+
+    return merged;
+};
+
+const isTagCount = (item: unknown): item is TagCount => {
+    if (!item || typeof item !== 'object') return false;
+    const candidate = item as { tag?: unknown; count?: unknown };
+    return typeof candidate.tag === 'string' && typeof candidate.count === 'number';
+};
 
 const ListLayout: React.FC = () => {
     const navigate = useNavigate();
@@ -40,26 +74,139 @@ const ListLayout: React.FC = () => {
     const [posts, setPosts] = useState<Post[]>([]);
     const [loading, setLoading] = useState(true);
     const [allTags, setAllTags] = useState<string[]>([]);
+    const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
     const [totalPosts, setTotalPosts] = useState(0);
+    const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
+    const [tagSearchInput, setTagSearchInput] = useState('');
+    const [recentTags, setRecentTags] = useState<string[]>([]);
+    const [activeOptionIndex, setActiveOptionIndex] = useState(-1);
+    const [allTagScrollTop, setAllTagScrollTop] = useState(0);
+    const tagFilterRef = useRef<HTMLDivElement | null>(null);
+    const tagSearchInputRef = useRef<HTMLInputElement | null>(null);
+    const allTagVirtualListRef = useRef<HTMLDivElement | null>(null);
 
-    const debouncedSearch = useDebounce(searchTerm, 300);
+    const debouncedSearch = useDebounce(searchTerm, TAG_FILTER_DEBOUNCE_MS);
+    const debouncedSelectedTags = useDebounce(selectedTags, TAG_FILTER_DEBOUNCE_MS);
+    const debouncedTagSearch = useDebounce(tagSearchInput, TAG_FILTER_DEBOUNCE_MS);
     const totalPages = Math.max(1, Math.ceil(totalPosts / POSTS_PER_PAGE));
+
+    const sortedTagCounts = useMemo(
+        () =>
+            [...tagCounts].sort((a, b) => {
+                if (b.count === a.count) return a.tag.localeCompare(b.tag, 'ko');
+                return b.count - a.count;
+            }),
+        [tagCounts]
+    );
+    const topTagChips = useMemo(() => sortedTagCounts.map(item => item.tag).slice(0, 5), [sortedTagCounts]);
+    const popularTags = useMemo(() => sortedTagCounts.map(item => item.tag).slice(0, 12), [sortedTagCounts]);
+    const pinnedTagChips = useMemo(
+        () => mergeUniqueTags(selectedTags, topTagChips),
+        [selectedTags, topTagChips]
+    );
+    const normalizedTagSearch = debouncedTagSearch.trim().toLowerCase();
+
+    const searchedTags = useMemo(() => {
+        if (!normalizedTagSearch) return allTags;
+        return allTags.filter(tag => tag.toLowerCase().includes(normalizedTagSearch));
+    }, [allTags, normalizedTagSearch]);
+
+    const sectionRecentTags = useMemo(() => {
+        const candidate = recentTags.filter(tag => allTags.includes(tag));
+        if (!normalizedTagSearch) return candidate;
+        return candidate.filter(tag => tag.toLowerCase().includes(normalizedTagSearch));
+    }, [recentTags, allTags, normalizedTagSearch]);
+
+    const sectionPopularTags = useMemo(() => {
+        if (!normalizedTagSearch) return popularTags;
+        return popularTags.filter(tag => tag.toLowerCase().includes(normalizedTagSearch));
+    }, [popularTags, normalizedTagSearch]);
+
+    const sectionedTags = useMemo(() => {
+        const seen = new Set<string>();
+        const recent: string[] = [];
+        const popular: string[] = [];
+        const all: string[] = [];
+
+        sectionRecentTags.forEach(tag => {
+            if (!seen.has(tag)) {
+                seen.add(tag);
+                recent.push(tag);
+            }
+        });
+        sectionPopularTags.forEach(tag => {
+            if (!seen.has(tag)) {
+                seen.add(tag);
+                popular.push(tag);
+            }
+        });
+        searchedTags.forEach(tag => {
+            if (!seen.has(tag)) {
+                seen.add(tag);
+                all.push(tag);
+            }
+        });
+
+        return { recent, popular, all };
+    }, [sectionRecentTags, sectionPopularTags, searchedTags]);
+
+    const optionItems = useMemo(
+        () => [...sectionedTags.recent, ...sectionedTags.popular, ...sectionedTags.all],
+        [sectionedTags]
+    );
+    const optionIndexMap = useMemo(
+        () => new Map(optionItems.map((tag, index) => [tag, index])),
+        [optionItems]
+    );
+    const allSectionOffset = sectionedTags.recent.length + sectionedTags.popular.length;
+    const useAllTagVirtualScroll = sectionedTags.all.length > TAG_VIRTUAL_THRESHOLD;
+
+    const allTagVirtualRange = useMemo(() => {
+        const totalCount = sectionedTags.all.length;
+        if (!useAllTagVirtualScroll) {
+            return {
+                start: 0,
+                end: totalCount,
+                topSpacer: 0,
+                bottomSpacer: 0,
+            };
+        }
+        const visibleCount = Math.ceil(TAG_VIRTUAL_VIEWPORT_HEIGHT / TAG_VIRTUAL_ROW_HEIGHT);
+        const start = Math.max(0, Math.floor(allTagScrollTop / TAG_VIRTUAL_ROW_HEIGHT) - TAG_VIRTUAL_OVERSCAN);
+        const end = Math.min(totalCount, start + visibleCount + TAG_VIRTUAL_OVERSCAN * 2);
+        return {
+            start,
+            end,
+            topSpacer: start * TAG_VIRTUAL_ROW_HEIGHT,
+            bottomSpacer: (totalCount - end) * TAG_VIRTUAL_ROW_HEIGHT,
+        };
+    }, [allTagScrollTop, sectionedTags.all.length, useAllTagVirtualScroll]);
 
     // URL 쿼리 파라미터 동기화
     useEffect(() => {
         const params: Record<string, string> = {};
         if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
-        if (selectedTags.length > 0) params.tags = selectedTags.join(',');
+        if (debouncedSelectedTags.length > 0) params.tags = debouncedSelectedTags.join(',');
         if (currentPage > 1) params.page = String(currentPage);
 
         setSearchParams(params, { replace: true });
-    }, [debouncedSearch, selectedTags, currentPage, setSearchParams]);
+    }, [debouncedSearch, debouncedSelectedTags, currentPage, setSearchParams]);
 
     // 태그 목록 가져오기 (마운트 시 1회)
     useEffect(() => {
         const controller = new AbortController();
         api.get('/api/posts/tags', { signal: controller.signal })
-            .then(res => setAllTags(res.data.tags || []))
+            .then(res => {
+                const tags: string[] = Array.isArray(res.data?.tags) ? res.data.tags : [];
+                const rawTagCounts: unknown[] = Array.isArray(res.data?.tag_counts) ? res.data.tag_counts : [];
+                const counts: TagCount[] = rawTagCounts.length > 0
+                    ? rawTagCounts
+                        .filter(isTagCount)
+                        .map(item => ({ tag: item.tag, count: item.count }))
+                    : tags.map(tag => ({ tag, count: 0 }));
+                setAllTags(tags);
+                setTagCounts(counts);
+            })
             .catch(err => {
                 if (err?.name !== 'CanceledError') {
                     console.error('태그 목록 로드 실패:', err);
@@ -67,6 +214,76 @@ const ListLayout: React.FC = () => {
             });
         return () => controller.abort();
     }, []);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(RECENT_TAGS_STORAGE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                setRecentTags(parsed.filter(item => typeof item === 'string'));
+            }
+        } catch (error) {
+            console.error('최근 태그 로드 실패:', error);
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(RECENT_TAGS_STORAGE_KEY, JSON.stringify(recentTags.slice(0, RECENT_TAGS_MAX)));
+        } catch (error) {
+            console.error('최근 태그 저장 실패:', error);
+        }
+    }, [recentTags]);
+
+    useEffect(() => {
+        const handleDocumentClick = (event: MouseEvent) => {
+            if (!tagFilterRef.current) return;
+            if (tagFilterRef.current.contains(event.target as Node)) return;
+            setIsTagPopoverOpen(false);
+            setActiveOptionIndex(-1);
+        };
+        document.addEventListener('mousedown', handleDocumentClick);
+        return () => document.removeEventListener('mousedown', handleDocumentClick);
+    }, []);
+
+    useEffect(() => {
+        if (optionItems.length === 0) {
+            setActiveOptionIndex(-1);
+            return;
+        }
+        setActiveOptionIndex(prev => {
+            if (prev < 0) return 0;
+            return Math.min(prev, optionItems.length - 1);
+        });
+    }, [optionItems]);
+
+    useEffect(() => {
+        setAllTagScrollTop(0);
+        if (allTagVirtualListRef.current) {
+            allTagVirtualListRef.current.scrollTop = 0;
+        }
+    }, [normalizedTagSearch, isTagPopoverOpen, sectionedTags.all.length]);
+
+    useEffect(() => {
+        if (!isTagPopoverOpen || !useAllTagVirtualScroll) return;
+        if (activeOptionIndex < allSectionOffset || activeOptionIndex >= allSectionOffset + sectionedTags.all.length) return;
+
+        const container = allTagVirtualListRef.current;
+        if (!container) return;
+
+        const localIndex = activeOptionIndex - allSectionOffset;
+        const itemTop = localIndex * TAG_VIRTUAL_ROW_HEIGHT;
+        const itemBottom = itemTop + TAG_VIRTUAL_ROW_HEIGHT;
+        const viewportTop = container.scrollTop;
+        const viewportBottom = viewportTop + TAG_VIRTUAL_VIEWPORT_HEIGHT;
+
+        if (itemTop < viewportTop) {
+            container.scrollTop = itemTop;
+        } else if (itemBottom > viewportBottom) {
+            container.scrollTop = itemBottom - TAG_VIRTUAL_VIEWPORT_HEIGHT;
+        }
+    }, [activeOptionIndex, allSectionOffset, isTagPopoverOpen, sectionedTags.all.length, useAllTagVirtualScroll]);
 
     // 게시글 목록 가져오기
     const fetchPosts = useCallback(async (signal?: AbortSignal) => {
@@ -81,21 +298,22 @@ const ListLayout: React.FC = () => {
             if (debouncedSearch.trim()) {
                 params.search = debouncedSearch.trim();
             }
-            if (selectedTags.length > 0) {
-                params.tags = selectedTags.join(',');
+            if (debouncedSelectedTags.length > 0) {
+                params.tags = debouncedSelectedTags.join(',');
             }
 
             const response = await api.get('/api/posts', { params, signal });
             setPosts(response.data.items);
             setTotalPosts(response.data.total);
-        } catch (err: any) {
-            if (err?.name !== 'CanceledError') {
+        } catch (err: unknown) {
+            const isCanceled = !!err && typeof err === 'object' && 'name' in err && err.name === 'CanceledError';
+            if (!isCanceled) {
                 console.error('게시글 로드 실패:', err);
             }
         } finally {
             setLoading(false);
         }
-    }, [currentPage, debouncedSearch, selectedTags]);
+    }, [currentPage, debouncedSearch, debouncedSelectedTags]);
 
     // 디바운스된 검색어/태그/페이지 변경 시 데이터 로드
     useEffect(() => {
@@ -112,11 +330,13 @@ const ListLayout: React.FC = () => {
 
     // 태그 칩 토글
     const handleTagToggle = (tag: string) => {
-        setSelectedTags(prev =>
-            prev.includes(tag)
+        setSelectedTags(prev => {
+            const next = prev.includes(tag)
                 ? prev.filter(t => t !== tag)
-                : [...prev, tag]
-        );
+                : [...prev, tag];
+            return next;
+        });
+        setRecentTags(prev => mergeUniqueTags([tag], prev).slice(0, RECENT_TAGS_MAX));
         setCurrentPage(1);
     };
 
@@ -124,6 +344,40 @@ const ListLayout: React.FC = () => {
     const handleClearTags = () => {
         setSelectedTags([]);
         setCurrentPage(1);
+    };
+
+    const toggleTagPopover = () => {
+        setIsTagPopoverOpen(prev => {
+            const next = !prev;
+            if (next) {
+                setTimeout(() => tagSearchInputRef.current?.focus(), 0);
+            }
+            return next;
+        });
+    };
+
+    const handleTagSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (!isTagPopoverOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+            setIsTagPopoverOpen(true);
+            return;
+        }
+
+        if (!optionItems.length) return;
+
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            setActiveOptionIndex(prev => (prev + 1) % optionItems.length);
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            setActiveOptionIndex(prev => (prev - 1 + optionItems.length) % optionItems.length);
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            const option = optionItems[Math.max(activeOptionIndex, 0)];
+            if (option) handleTagToggle(option);
+        } else if (event.key === 'Escape') {
+            setIsTagPopoverOpen(false);
+            setActiveOptionIndex(-1);
+        }
     };
 
     const handlePostClick = (postId: number) => {
@@ -214,7 +468,8 @@ const ListLayout: React.FC = () => {
 
                     {/* 태그 칩 필터 */}
                     {allTags.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative" ref={tagFilterRef}>
+                            <div className="flex flex-wrap items-center gap-2">
                             {selectedTags.length > 0 && (
                                 <button
                                     onClick={handleClearTags}
@@ -223,7 +478,7 @@ const ListLayout: React.FC = () => {
                                     초기화
                                 </button>
                             )}
-                            {allTags.map(tag => {
+                            {pinnedTagChips.map(tag => {
                                 const isSelected = selectedTags.includes(tag);
                                 return (
                                     <button
@@ -238,6 +493,145 @@ const ListLayout: React.FC = () => {
                                     </button>
                                 );
                             })}
+                                <button
+                                    type="button"
+                                    aria-label="태그 더보기"
+                                    onClick={toggleTagPopover}
+                                    className={`w-8 h-8 inline-flex items-center justify-center rounded-full border text-sm font-semibold transition-colors ${isTagPopoverOpen
+                                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                        : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                        }`}
+                                >
+                                    +
+                                </button>
+                            </div>
+
+                            {isTagPopoverOpen && (
+                                <div className="absolute z-20 mt-2 w-full max-w-xl rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl p-3">
+                                    <input
+                                        ref={tagSearchInputRef}
+                                        type="text"
+                                        role="combobox"
+                                        aria-expanded={isTagPopoverOpen}
+                                        aria-controls="tag-popover-options"
+                                        aria-activedescendant={activeOptionIndex >= 0 ? `tag-option-${activeOptionIndex}` : undefined}
+                                        value={tagSearchInput}
+                                        onChange={(e) => setTagSearchInput(e.target.value)}
+                                        onKeyDown={handleTagSearchKeyDown}
+                                        placeholder="태그 검색..."
+                                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    />
+
+                                    <div id="tag-popover-options" role="listbox" className="mt-3 space-y-3 max-h-72 overflow-y-auto">
+                                        <div>
+                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">최근 사용</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {sectionedTags.recent.length > 0 ? sectionedTags.recent.map(tag => {
+                                                    const isSelected = selectedTags.includes(tag);
+                                                    const optionIndex = optionIndexMap.get(tag) ?? -1;
+                                                    return (
+                                                        <button
+                                                            key={`recent-${tag}`}
+                                                            id={optionIndex >= 0 ? `tag-option-${optionIndex}` : undefined}
+                                                            role="option"
+                                                            aria-selected={isSelected}
+                                                            onClick={() => handleTagToggle(tag)}
+                                                            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${isSelected
+                                                                ? 'bg-emerald-600 text-white'
+                                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                                                } ${optionIndex === activeOptionIndex ? 'ring-2 ring-emerald-400' : ''}`}
+                                                        >
+                                                            {tag}
+                                                        </button>
+                                                    );
+                                                }) : (
+                                                    <p className="text-xs text-gray-400 dark:text-gray-500">최근 태그가 없습니다</p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">인기 태그</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {sectionedTags.popular.length > 0 ? sectionedTags.popular.map(tag => {
+                                                    const isSelected = selectedTags.includes(tag);
+                                                    const optionIndex = optionIndexMap.get(tag) ?? -1;
+                                                    return (
+                                                        <button
+                                                            key={`popular-${tag}`}
+                                                            id={optionIndex >= 0 ? `tag-option-${optionIndex}` : undefined}
+                                                            role="option"
+                                                            aria-selected={isSelected}
+                                                            onClick={() => handleTagToggle(tag)}
+                                                            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${isSelected
+                                                                ? 'bg-emerald-600 text-white'
+                                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                                                } ${optionIndex === activeOptionIndex ? 'ring-2 ring-emerald-400' : ''}`}
+                                                        >
+                                                            {tag}
+                                                        </button>
+                                                    );
+                                                }) : (
+                                                    <p className="text-xs text-gray-400 dark:text-gray-500">표시할 인기 태그가 없습니다</p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">전체 (검색 결과)</p>
+                                            {sectionedTags.all.length > 0 ? (
+                                                <div
+                                                    ref={allTagVirtualListRef}
+                                                    onScroll={(event) => setAllTagScrollTop(event.currentTarget.scrollTop)}
+                                                    className="rounded-lg border border-gray-100 dark:border-gray-700 overflow-y-auto"
+                                                    style={{ maxHeight: `${TAG_VIRTUAL_VIEWPORT_HEIGHT}px` }}
+                                                >
+                                                    <div style={{ paddingTop: `${allTagVirtualRange.topSpacer}px`, paddingBottom: `${allTagVirtualRange.bottomSpacer}px` }}>
+                                                        {sectionedTags.all
+                                                            .slice(allTagVirtualRange.start, allTagVirtualRange.end)
+                                                            .map((tag, index) => {
+                                                                const actualIndex = allTagVirtualRange.start + index;
+                                                                const optionIndex = allSectionOffset + actualIndex;
+                                                                const isSelected = selectedTags.includes(tag);
+                                                                return (
+                                                                    <button
+                                                                        key={`all-${tag}`}
+                                                                        id={`tag-option-${optionIndex}`}
+                                                                        role="option"
+                                                                        aria-selected={isSelected}
+                                                                        onClick={() => handleTagToggle(tag)}
+                                                                        className={`w-full px-3 text-left text-xs font-medium transition-colors border-b last:border-b-0 border-gray-100 dark:border-gray-700 ${isSelected
+                                                                            ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                                                            : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                                                            } ${optionIndex === activeOptionIndex ? 'ring-1 ring-inset ring-emerald-400' : ''}`}
+                                                                        style={{ height: `${TAG_VIRTUAL_ROW_HEIGHT}px` }}
+                                                                    >
+                                                                        {tag}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-gray-400 dark:text-gray-500">검색 결과가 없습니다</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                            선택됨 {selectedTags.length}개
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={handleClearTags}
+                                            className="text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:underline"
+                                        >
+                                            초기화
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

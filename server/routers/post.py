@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from typing import Optional, List
 import json
 import re
+from collections import Counter
 from datetime import datetime
 
 from db.session import get_db
@@ -328,7 +329,10 @@ async def get_all_tags(
     Redis 캐시 활용 (TTL 10분)
     
     Returns:
-        { "tags": ["fastapi", "python", "react", ...] }
+        {
+            "tags": ["fastapi", "python", "react", ...],
+            "tag_counts": [{"tag": "python", "count": 12}, ...]
+        }
     """
     # 캐시 시도
     cache_key = "cache:posts:tags"
@@ -346,11 +350,19 @@ async def get_all_tags(
         rows = result.scalars().all()
         
         tag_set: set[str] = set()
+        tag_counter: Counter[str] = Counter()
         for tags in rows:
             if isinstance(tags, list):
                 tag_set.update(tags)
+                tag_counter.update([tag for tag in tags if isinstance(tag, str) and tag])
         
-        response_data = {"tags": sorted(tag_set)}
+        response_data = {
+            "tags": sorted(tag_set),
+            "tag_counts": [
+                {"tag": tag, "count": count}
+                for tag, count in sorted(tag_counter.items(), key=lambda item: (-item[1], item[0]))
+            ]
+        }
 
         # 캐시 저장 (TTL 10분)
         await cache_set(cache_key, json.dumps(response_data, ensure_ascii=False), ttl=600)
