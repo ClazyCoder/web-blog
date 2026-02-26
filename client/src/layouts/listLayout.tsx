@@ -28,10 +28,7 @@ const POSTS_PER_PAGE = 10;
 const TAG_FILTER_DEBOUNCE_MS = 200;
 const RECENT_TAGS_STORAGE_KEY = 'listLayoutRecentTags';
 const RECENT_TAGS_MAX = 10;
-const TAG_VIRTUAL_THRESHOLD = 40;
-const TAG_VIRTUAL_ROW_HEIGHT = 34;
-const TAG_VIRTUAL_VIEWPORT_HEIGHT = 220;
-const TAG_VIRTUAL_OVERSCAN = 5;
+const TAG_POPOVER_BODY_HEIGHT = 288;
 
 const mergeUniqueTags = (...groups: string[][]) => {
     const seen = new Set<string>();
@@ -47,6 +44,13 @@ const mergeUniqueTags = (...groups: string[][]) => {
     });
 
     return merged;
+};
+
+const prioritizeSelected = (tags: string[], selectedTags: string[]) => {
+    const selectedSet = new Set(selectedTags);
+    const selectedFirst = selectedTags.filter(tag => tags.includes(tag));
+    const rest = tags.filter(tag => !selectedSet.has(tag));
+    return mergeUniqueTags(selectedFirst, rest);
 };
 
 const isTagCount = (item: unknown): item is TagCount => {
@@ -77,13 +81,15 @@ const ListLayout: React.FC = () => {
     const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
     const [totalPosts, setTotalPosts] = useState(0);
     const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
+    const [isTagChipExpanded, setIsTagChipExpanded] = useState(false);
+    const [collapsedChipCount, setCollapsedChipCount] = useState(0);
     const [tagSearchInput, setTagSearchInput] = useState('');
     const [recentTags, setRecentTags] = useState<string[]>([]);
     const [activeOptionIndex, setActiveOptionIndex] = useState(-1);
-    const [allTagScrollTop, setAllTagScrollTop] = useState(0);
     const tagFilterRef = useRef<HTMLDivElement | null>(null);
     const tagSearchInputRef = useRef<HTMLInputElement | null>(null);
-    const allTagVirtualListRef = useRef<HTMLDivElement | null>(null);
+    const tagChipVisibleContainerRef = useRef<HTMLDivElement | null>(null);
+    const tagChipMeasureContainerRef = useRef<HTMLDivElement | null>(null);
 
     const debouncedSearch = useDebounce(searchTerm, TAG_FILTER_DEBOUNCE_MS);
     const debouncedSelectedTags = useDebounce(selectedTags, TAG_FILTER_DEBOUNCE_MS);
@@ -104,7 +110,45 @@ const ListLayout: React.FC = () => {
         () => mergeUniqueTags(selectedTags, topTagChips),
         [selectedTags, topTagChips]
     );
+    const recalculateCollapsedChipCount = useCallback(() => {
+        const visibleContainer = tagChipVisibleContainerRef.current;
+        const measureContainer = tagChipMeasureContainerRef.current;
+        if (!visibleContainer || !measureContainer) return;
+
+        const chipNodes = Array.from(measureContainer.querySelectorAll('[data-chip-measure="true"]')) as HTMLElement[];
+        if (chipNodes.length === 0) {
+            setCollapsedChipCount(0);
+            return;
+        }
+
+        const availableWidth = visibleContainer.clientWidth;
+        if (availableWidth <= 0) {
+            setCollapsedChipCount(chipNodes.length);
+            return;
+        }
+
+        const gapPx = 8;
+        let usedWidth = 0;
+        let fitCount = 0;
+
+        for (const node of chipNodes) {
+            const chipWidth = node.offsetWidth;
+            const nextWidth = fitCount === 0 ? chipWidth : chipWidth + gapPx;
+            if (usedWidth + nextWidth > availableWidth) break;
+            usedWidth += nextWidth;
+            fitCount += 1;
+        }
+
+        setCollapsedChipCount(fitCount);
+    }, []);
+
+    const visibleTagChips = useMemo(
+        () => (isTagChipExpanded ? pinnedTagChips : pinnedTagChips.slice(0, collapsedChipCount)),
+        [collapsedChipCount, isTagChipExpanded, pinnedTagChips]
+    );
+    const hiddenTagChipCount = Math.max(0, pinnedTagChips.length - collapsedChipCount);
     const normalizedTagSearch = debouncedTagSearch.trim().toLowerCase();
+    const isTagSearching = normalizedTagSearch.length > 0;
 
     const searchedTags = useMemo(() => {
         if (!normalizedTagSearch) return allTags;
@@ -112,50 +156,35 @@ const ListLayout: React.FC = () => {
     }, [allTags, normalizedTagSearch]);
 
     const sectionRecentTags = useMemo(() => {
-        const candidate = recentTags.filter(tag => allTags.includes(tag));
-        if (!normalizedTagSearch) return candidate;
-        return candidate.filter(tag => tag.toLowerCase().includes(normalizedTagSearch));
-    }, [recentTags, allTags, normalizedTagSearch]);
+        return recentTags.filter(tag => allTags.includes(tag));
+    }, [recentTags, allTags]);
 
-    const sectionPopularTags = useMemo(() => {
-        if (!normalizedTagSearch) return popularTags;
-        return popularTags.filter(tag => tag.toLowerCase().includes(normalizedTagSearch));
-    }, [popularTags, normalizedTagSearch]);
+    const sectionPopularTags = useMemo(() => popularTags, [popularTags]);
 
     const sectionedTags = useMemo(() => {
         const uniqueRecent = Array.from(new Set(sectionRecentTags));
         const uniquePopular = Array.from(new Set(sectionPopularTags));
         const uniqueAll = Array.from(new Set(searchedTags));
-        return { recent: uniqueRecent, popular: uniquePopular, all: uniqueAll };
-    }, [sectionRecentTags, sectionPopularTags, searchedTags]);
+
+        if (isTagSearching) {
+            return {
+                recent: [],
+                popular: [],
+                all: prioritizeSelected(uniqueAll, selectedTags),
+            };
+        }
+
+        return {
+            recent: prioritizeSelected(uniqueRecent, selectedTags),
+            popular: prioritizeSelected(uniquePopular, selectedTags),
+            all: [],
+        };
+    }, [isTagSearching, searchedTags, sectionPopularTags, sectionRecentTags, selectedTags]);
 
     const optionItems = useMemo(
         () => [...sectionedTags.recent, ...sectionedTags.popular, ...sectionedTags.all],
         [sectionedTags]
     );
-    const allSectionOffset = sectionedTags.recent.length + sectionedTags.popular.length;
-    const useAllTagVirtualScroll = sectionedTags.all.length > TAG_VIRTUAL_THRESHOLD;
-
-    const allTagVirtualRange = useMemo(() => {
-        const totalCount = sectionedTags.all.length;
-        if (!useAllTagVirtualScroll) {
-            return {
-                start: 0,
-                end: totalCount,
-                topSpacer: 0,
-                bottomSpacer: 0,
-            };
-        }
-        const visibleCount = Math.ceil(TAG_VIRTUAL_VIEWPORT_HEIGHT / TAG_VIRTUAL_ROW_HEIGHT);
-        const start = Math.max(0, Math.floor(allTagScrollTop / TAG_VIRTUAL_ROW_HEIGHT) - TAG_VIRTUAL_OVERSCAN);
-        const end = Math.min(totalCount, start + visibleCount + TAG_VIRTUAL_OVERSCAN * 2);
-        return {
-            start,
-            end,
-            topSpacer: start * TAG_VIRTUAL_ROW_HEIGHT,
-            bottomSpacer: (totalCount - end) * TAG_VIRTUAL_ROW_HEIGHT,
-        };
-    }, [allTagScrollTop, sectionedTags.all.length, useAllTagVirtualScroll]);
 
     // URL 쿼리 파라미터 동기화
     useEffect(() => {
@@ -223,6 +252,27 @@ const ListLayout: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        if (isTagChipExpanded) return;
+        const raf = requestAnimationFrame(recalculateCollapsedChipCount);
+        return () => cancelAnimationFrame(raf);
+    }, [isTagChipExpanded, pinnedTagChips, recalculateCollapsedChipCount]);
+
+    useEffect(() => {
+        if (isTagChipExpanded) return;
+        const visibleContainer = tagChipVisibleContainerRef.current;
+        const measureContainer = tagChipMeasureContainerRef.current;
+        if (!visibleContainer || !measureContainer) return;
+
+        const observer = new ResizeObserver(() => {
+            recalculateCollapsedChipCount();
+        });
+        observer.observe(visibleContainer);
+        observer.observe(measureContainer);
+
+        return () => observer.disconnect();
+    }, [isTagChipExpanded, recalculateCollapsedChipCount]);
+
+    useEffect(() => {
         if (optionItems.length === 0) {
             setActiveOptionIndex(-1);
             return;
@@ -232,33 +282,6 @@ const ListLayout: React.FC = () => {
             return Math.min(prev, optionItems.length - 1);
         });
     }, [optionItems]);
-
-    useEffect(() => {
-        setAllTagScrollTop(0);
-        if (allTagVirtualListRef.current) {
-            allTagVirtualListRef.current.scrollTop = 0;
-        }
-    }, [normalizedTagSearch, isTagPopoverOpen, sectionedTags.all.length]);
-
-    useEffect(() => {
-        if (!isTagPopoverOpen || !useAllTagVirtualScroll) return;
-        if (activeOptionIndex < allSectionOffset || activeOptionIndex >= allSectionOffset + sectionedTags.all.length) return;
-
-        const container = allTagVirtualListRef.current;
-        if (!container) return;
-
-        const localIndex = activeOptionIndex - allSectionOffset;
-        const itemTop = localIndex * TAG_VIRTUAL_ROW_HEIGHT;
-        const itemBottom = itemTop + TAG_VIRTUAL_ROW_HEIGHT;
-        const viewportTop = container.scrollTop;
-        const viewportBottom = viewportTop + TAG_VIRTUAL_VIEWPORT_HEIGHT;
-
-        if (itemTop < viewportTop) {
-            container.scrollTop = itemTop;
-        } else if (itemBottom > viewportBottom) {
-            container.scrollTop = itemBottom - TAG_VIRTUAL_VIEWPORT_HEIGHT;
-        }
-    }, [activeOptionIndex, allSectionOffset, isTagPopoverOpen, sectionedTags.all.length, useAllTagVirtualScroll]);
 
     // 게시글 목록 가져오기
     const fetchPosts = useCallback(async (signal?: AbortSignal) => {
@@ -347,6 +370,13 @@ const ListLayout: React.FC = () => {
             setActiveOptionIndex(prev => (prev - 1 + optionItems.length) % optionItems.length);
         } else if (event.key === 'Enter') {
             event.preventDefault();
+            const trimmed = tagSearchInput.trim();
+            if (trimmed) {
+                const exactMatch = allTags.find(tag => tag.toLowerCase() === trimmed.toLowerCase());
+                handleTagToggle(exactMatch || trimmed);
+                setTagSearchInput('');
+                return;
+            }
             const option = optionItems[Math.max(activeOptionIndex, 0)];
             if (option) handleTagToggle(option);
         } else if (event.key === 'Escape') {
@@ -444,7 +474,7 @@ const ListLayout: React.FC = () => {
                     {/* 태그 칩 필터 */}
                     {allTags.length > 0 && (
                         <div className="relative" ref={tagFilterRef}>
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className={`flex items-center gap-2 ${isTagChipExpanded ? 'flex-wrap' : 'flex-nowrap'}`}>
                             {selectedTags.length > 0 && (
                                 <button
                                     onClick={handleClearTags}
@@ -453,7 +483,11 @@ const ListLayout: React.FC = () => {
                                     초기화
                                 </button>
                             )}
-                            {pinnedTagChips.map(tag => {
+                            <div
+                                ref={tagChipVisibleContainerRef}
+                                className={`min-w-0 flex items-center gap-2 ${isTagChipExpanded ? 'flex-wrap' : 'flex-nowrap overflow-hidden'}`}
+                            >
+                            {visibleTagChips.map(tag => {
                                 const isSelected = selectedTags.includes(tag);
                                 return (
                                     <button
@@ -468,6 +502,25 @@ const ListLayout: React.FC = () => {
                                     </button>
                                 );
                             })}
+                            </div>
+                                {!isTagChipExpanded && hiddenTagChipCount > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsTagChipExpanded(true)}
+                                        className="px-2.5 py-1.5 text-xs font-medium rounded-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                    >
+                                        +{hiddenTagChipCount}
+                                    </button>
+                                )}
+                                {isTagChipExpanded && hiddenTagChipCount > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsTagChipExpanded(false)}
+                                        className="px-2.5 py-1.5 text-xs font-medium rounded-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                    >
+                                        접기
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     aria-label="태그 더보기"
@@ -479,6 +532,20 @@ const ListLayout: React.FC = () => {
                                 >
                                     +
                                 </button>
+                            </div>
+                            <div ref={tagChipMeasureContainerRef} className="absolute -z-10 invisible pointer-events-none h-0 overflow-hidden">
+                                <div className="flex items-center gap-2">
+                                    {pinnedTagChips.map(tag => (
+                                        <button
+                                            key={`measure-${tag}`}
+                                            type="button"
+                                            data-chip-measure="true"
+                                            className="px-3 py-1.5 text-xs font-medium rounded-full"
+                                        >
+                                            {tag}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
                             {isTagPopoverOpen && (
@@ -497,7 +564,13 @@ const ListLayout: React.FC = () => {
                                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                     />
 
-                                    <div id="tag-popover-options" role="listbox" className="mt-3 space-y-3 max-h-72 overflow-y-auto px-1 py-1">
+                                    <div
+                                        id="tag-popover-options"
+                                        role="listbox"
+                                        className="mt-3 overflow-y-auto px-1 py-1 space-y-3"
+                                        style={{ height: `${TAG_POPOVER_BODY_HEIGHT}px` }}
+                                    >
+                                        {!isTagSearching && (
                                         <div>
                                             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">최근 사용</p>
                                             <div className="flex flex-wrap gap-2 px-0.5">
@@ -524,7 +597,9 @@ const ListLayout: React.FC = () => {
                                                 )}
                                             </div>
                                         </div>
+                                        )}
 
+                                        {!isTagSearching && (
                                         <div>
                                             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">인기 태그</p>
                                             <div className="flex flex-wrap gap-2 px-0.5">
@@ -551,46 +626,36 @@ const ListLayout: React.FC = () => {
                                                 )}
                                             </div>
                                         </div>
+                                        )}
 
-                                        <div>
-                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">전체 (검색 결과)</p>
-                                            {sectionedTags.all.length > 0 ? (
-                                                <div
-                                                    ref={allTagVirtualListRef}
-                                                    onScroll={(event) => setAllTagScrollTop(event.currentTarget.scrollTop)}
-                                                    className="rounded-lg border border-gray-100 dark:border-gray-700 overflow-y-auto"
-                                                    style={{ maxHeight: `${TAG_VIRTUAL_VIEWPORT_HEIGHT}px` }}
-                                                >
-                                                    <div style={{ paddingTop: `${allTagVirtualRange.topSpacer}px`, paddingBottom: `${allTagVirtualRange.bottomSpacer}px` }}>
-                                                        {sectionedTags.all
-                                                            .slice(allTagVirtualRange.start, allTagVirtualRange.end)
-                                                            .map((tag, index) => {
-                                                                const actualIndex = allTagVirtualRange.start + index;
-                                                                const optionIndex = allSectionOffset + actualIndex;
-                                                                const isSelected = selectedTags.includes(tag);
-                                                                return (
-                                                                    <button
-                                                                        key={`all-${tag}`}
-                                                                        id={`tag-option-${optionIndex}`}
-                                                                        role="option"
-                                                                        aria-selected={isSelected}
-                                                                        onClick={() => handleTagToggle(tag)}
-                                                                        className={`w-full px-3 text-left text-xs font-medium transition-colors border-b last:border-b-0 border-gray-100 dark:border-gray-700 ${isSelected
-                                                                            ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-                                                                            : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                                                            } ${optionIndex === activeOptionIndex ? 'ring-1 ring-emerald-400 ring-offset-1 ring-offset-white dark:ring-offset-gray-800' : ''}`}
-                                                                        style={{ height: `${TAG_VIRTUAL_ROW_HEIGHT}px` }}
-                                                                    >
-                                                                        {tag}
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                    </div>
+                                        {isTagSearching && (
+                                            <div>
+                                                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">전체 (검색 결과)</p>
+                                                <div className="flex flex-wrap gap-2 px-0.5">
+                                                    {sectionedTags.all.length > 0 ? sectionedTags.all.map((tag, index) => {
+                                                        const isSelected = selectedTags.includes(tag);
+                                                        const optionIndex = index;
+                                                        return (
+                                                            <button
+                                                                key={`all-${tag}`}
+                                                                id={`tag-option-${optionIndex}`}
+                                                                role="option"
+                                                                aria-selected={isSelected}
+                                                                onClick={() => handleTagToggle(tag)}
+                                                                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${isSelected
+                                                                    ? 'bg-emerald-600 text-white'
+                                                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                                                    } ${optionIndex === activeOptionIndex ? 'ring-2 ring-emerald-400 ring-offset-1 ring-offset-white dark:ring-offset-gray-800' : ''}`}
+                                                            >
+                                                                {tag}
+                                                            </button>
+                                                        );
+                                                    }) : (
+                                                        <p className="text-xs text-gray-400 dark:text-gray-500">검색 결과가 없습니다</p>
+                                                    )}
                                                 </div>
-                                            ) : (
-                                                <p className="text-xs text-gray-400 dark:text-gray-500">검색 결과가 없습니다</p>
-                                            )}
-                                        </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
