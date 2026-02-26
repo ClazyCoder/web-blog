@@ -522,10 +522,10 @@ const ListLayout: React.FC = () => {
                                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                     />
 
-                                    <div id="tag-popover-options" role="listbox" className="mt-3 space-y-3 max-h-72 overflow-y-auto">
+                                    <div id="tag-popover-options" role="listbox" className="mt-3 space-y-3 max-h-72 overflow-y-auto px-1 py-1">
                                         <div>
                                             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">최근 사용</p>
-                                            <div className="flex flex-wrap gap-2">
+                                            <div className="flex flex-wrap gap-2 px-0.5">
                                                 {sectionedTags.recent.length > 0 ? sectionedTags.recent.map(tag => {
                                                     const isSelected = selectedTags.includes(tag);
                                                     const optionIndex = optionIndexMap.get(tag) ?? -1;
@@ -539,7 +539,7 @@ const ListLayout: React.FC = () => {
                                                             className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${isSelected
                                                                 ? 'bg-emerald-600 text-white'
                                                                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                                                } ${optionIndex === activeOptionIndex ? 'ring-2 ring-emerald-400' : ''}`}
+                                                                } ${optionIndex === activeOptionIndex ? 'ring-2 ring-emerald-400 ring-offset-1 ring-offset-white dark:ring-offset-gray-800' : ''}`}
                                                         >
                                                             {tag}
                                                         </button>
@@ -552,7 +552,7 @@ const ListLayout: React.FC = () => {
 
                                         <div>
                                             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">인기 태그</p>
-                                            <div className="flex flex-wrap gap-2">
+                                            <div className="flex flex-wrap gap-2 px-0.5">
                                                 {sectionedTags.popular.length > 0 ? sectionedTags.popular.map(tag => {
                                                     const isSelected = selectedTags.includes(tag);
                                                     const optionIndex = optionIndexMap.get(tag) ?? -1;
@@ -566,7 +566,7 @@ const ListLayout: React.FC = () => {
                                                             className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${isSelected
                                                                 ? 'bg-emerald-600 text-white'
                                                                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                                                } ${optionIndex === activeOptionIndex ? 'ring-2 ring-emerald-400' : ''}`}
+                                                                } ${optionIndex === activeOptionIndex ? 'ring-2 ring-emerald-400 ring-offset-1 ring-offset-white dark:ring-offset-gray-800' : ''}`}
                                                         >
                                                             {tag}
                                                         </button>
@@ -603,7 +603,7 @@ const ListLayout: React.FC = () => {
                                                                         className={`w-full px-3 text-left text-xs font-medium transition-colors border-b last:border-b-0 border-gray-100 dark:border-gray-700 ${isSelected
                                                                             ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
                                                                             : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                                                            } ${optionIndex === activeOptionIndex ? 'ring-1 ring-inset ring-emerald-400' : ''}`}
+                                                                            } ${optionIndex === activeOptionIndex ? 'ring-1 ring-emerald-400 ring-offset-1 ring-offset-white dark:ring-offset-gray-800' : ''}`}
                                                                         style={{ height: `${TAG_VIRTUAL_ROW_HEIGHT}px` }}
                                                                     >
                                                                         {tag}
