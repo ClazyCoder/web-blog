@@ -90,6 +90,7 @@ const ListLayout: React.FC = () => {
     const tagSearchInputRef = useRef<HTMLInputElement | null>(null);
     const tagChipVisibleContainerRef = useRef<HTMLDivElement | null>(null);
     const tagChipMeasureContainerRef = useRef<HTMLDivElement | null>(null);
+    const tagChipMoreButtonRef = useRef<HTMLButtonElement | null>(null);
 
     const debouncedSearch = useDebounce(searchTerm, TAG_FILTER_DEBOUNCE_MS);
     const debouncedSelectedTags = useDebounce(selectedTags, TAG_FILTER_DEBOUNCE_MS);
@@ -121,7 +122,10 @@ const ListLayout: React.FC = () => {
             return;
         }
 
-        const availableWidth = visibleContainer.clientWidth;
+        const recoveredWidth = tagChipMoreButtonRef.current
+            ? tagChipMoreButtonRef.current.offsetWidth + 8
+            : 0;
+        const availableWidth = visibleContainer.clientWidth + recoveredWidth;
         if (availableWidth <= 0) {
             setCollapsedChipCount(chipNodes.length);
             return;
@@ -485,7 +489,7 @@ const ListLayout: React.FC = () => {
                             )}
                             <div
                                 ref={tagChipVisibleContainerRef}
-                                className={`min-w-0 flex items-center gap-2 ${isTagChipExpanded ? 'flex-wrap' : 'flex-nowrap overflow-hidden'}`}
+                                className={`min-w-0 flex-1 flex items-center gap-2 ${isTagChipExpanded ? 'flex-wrap' : 'flex-nowrap overflow-hidden'}`}
                             >
                             {visibleTagChips.map(tag => {
                                 const isSelected = selectedTags.includes(tag);
@@ -505,6 +509,7 @@ const ListLayout: React.FC = () => {
                             </div>
                                 {!isTagChipExpanded && hiddenTagChipCount > 0 && (
                                     <button
+                                        ref={tagChipMoreButtonRef}
                                         type="button"
                                         onClick={() => setIsTagChipExpanded(true)}
                                         className="px-2.5 py-1.5 text-xs font-medium rounded-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
