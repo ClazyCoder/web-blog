@@ -364,15 +364,7 @@ const ListLayout: React.FC = () => {
             return;
         }
 
-        if (!optionItems.length) return;
-
-        if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            setActiveOptionIndex(prev => (prev + 1) % optionItems.length);
-        } else if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            setActiveOptionIndex(prev => (prev - 1 + optionItems.length) % optionItems.length);
-        } else if (event.key === 'Enter') {
+        if (event.key === 'Enter') {
             event.preventDefault();
             const trimmed = tagSearchInput.trim();
             if (trimmed) {
@@ -383,6 +375,17 @@ const ListLayout: React.FC = () => {
             }
             const option = optionItems[Math.max(activeOptionIndex, 0)];
             if (option) handleTagToggle(option);
+            return;
+        }
+
+        if (!optionItems.length) return;
+
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            setActiveOptionIndex(prev => (prev + 1) % optionItems.length);
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            setActiveOptionIndex(prev => (prev - 1 + optionItems.length) % optionItems.length);
         } else if (event.key === 'Escape') {
             setIsTagPopoverOpen(false);
             setActiveOptionIndex(-1);
@@ -489,7 +492,7 @@ const ListLayout: React.FC = () => {
                             )}
                             <div
                                 ref={tagChipVisibleContainerRef}
-                                className={`min-w-0 flex-1 flex items-center gap-2 ${isTagChipExpanded ? 'flex-wrap' : 'flex-nowrap overflow-hidden'}`}
+                                className={`min-w-0 flex-1 flex items-center gap-2 px-0.5 ${isTagChipExpanded ? 'flex-wrap' : 'flex-nowrap overflow-hidden'}`}
                             >
                             {visibleTagChips.map(tag => {
                                 const isSelected = selectedTags.includes(tag);
@@ -498,7 +501,7 @@ const ListLayout: React.FC = () => {
                                         key={tag}
                                         onClick={() => handleTagToggle(tag)}
                                         className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ${isSelected
-                                            ? 'bg-emerald-600 text-white shadow-sm scale-105'
+                                            ? 'bg-emerald-600 text-white shadow-sm'
                                             : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                                             }`}
                                     >
