@@ -29,6 +29,7 @@ const TAG_FILTER_DEBOUNCE_MS = 200;
 const RECENT_TAGS_STORAGE_KEY = 'listLayoutRecentTags';
 const RECENT_TAGS_MAX = 10;
 const TAG_POPOVER_BODY_HEIGHT = 288;
+const TAG_POPOVER_ANIMATION_MS = 180;
 
 const mergeUniqueTags = (...groups: string[][]) => {
     const seen = new Set<string>();
@@ -81,6 +82,7 @@ const ListLayout: React.FC = () => {
     const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
     const [totalPosts, setTotalPosts] = useState(0);
     const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
+    const [isTagPopoverRendered, setIsTagPopoverRendered] = useState(false);
     const [isTagChipExpanded, setIsTagChipExpanded] = useState(false);
     const [collapsedChipCount, setCollapsedChipCount] = useState(0);
     const [tagSearchInput, setTagSearchInput] = useState('');
@@ -254,6 +256,15 @@ const ListLayout: React.FC = () => {
         document.addEventListener('mousedown', handleDocumentClick);
         return () => document.removeEventListener('mousedown', handleDocumentClick);
     }, []);
+
+    useEffect(() => {
+        if (isTagPopoverOpen) {
+            setIsTagPopoverRendered(true);
+            return;
+        }
+        const timer = window.setTimeout(() => setIsTagPopoverRendered(false), TAG_POPOVER_ANIMATION_MS);
+        return () => window.clearTimeout(timer);
+    }, [isTagPopoverOpen]);
 
     useEffect(() => {
         if (isTagChipExpanded) return;
@@ -556,8 +567,14 @@ const ListLayout: React.FC = () => {
                                 </div>
                             </div>
 
-                            {isTagPopoverOpen && (
-                                <div className="absolute z-20 mt-2 w-full max-w-xl rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl p-3">
+                            {isTagPopoverRendered && (
+                                <div
+                                    className={`absolute z-20 mt-2 w-full max-w-xl rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl p-3 origin-top transition-all duration-200 ${isTagPopoverOpen
+                                        ? 'opacity-100 translate-y-0 scale-100'
+                                        : 'opacity-0 -translate-y-1 scale-95 pointer-events-none'
+                                        }`}
+                                    style={{ transitionDuration: `${TAG_POPOVER_ANIMATION_MS}ms` }}
+                                >
                                     <input
                                         ref={tagSearchInputRef}
                                         type="text"
