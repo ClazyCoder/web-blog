@@ -123,40 +123,15 @@ const ListLayout: React.FC = () => {
     }, [popularTags, normalizedTagSearch]);
 
     const sectionedTags = useMemo(() => {
-        const seen = new Set<string>();
-        const recent: string[] = [];
-        const popular: string[] = [];
-        const all: string[] = [];
-
-        sectionRecentTags.forEach(tag => {
-            if (!seen.has(tag)) {
-                seen.add(tag);
-                recent.push(tag);
-            }
-        });
-        sectionPopularTags.forEach(tag => {
-            if (!seen.has(tag)) {
-                seen.add(tag);
-                popular.push(tag);
-            }
-        });
-        searchedTags.forEach(tag => {
-            if (!seen.has(tag)) {
-                seen.add(tag);
-                all.push(tag);
-            }
-        });
-
-        return { recent, popular, all };
+        const uniqueRecent = Array.from(new Set(sectionRecentTags));
+        const uniquePopular = Array.from(new Set(sectionPopularTags));
+        const uniqueAll = Array.from(new Set(searchedTags));
+        return { recent: uniqueRecent, popular: uniquePopular, all: uniqueAll };
     }, [sectionRecentTags, sectionPopularTags, searchedTags]);
 
     const optionItems = useMemo(
         () => [...sectionedTags.recent, ...sectionedTags.popular, ...sectionedTags.all],
         [sectionedTags]
-    );
-    const optionIndexMap = useMemo(
-        () => new Map(optionItems.map((tag, index) => [tag, index])),
-        [optionItems]
     );
     const allSectionOffset = sectionedTags.recent.length + sectionedTags.popular.length;
     const useAllTagVirtualScroll = sectionedTags.all.length > TAG_VIRTUAL_THRESHOLD;
@@ -526,9 +501,9 @@ const ListLayout: React.FC = () => {
                                         <div>
                                             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">최근 사용</p>
                                             <div className="flex flex-wrap gap-2 px-0.5">
-                                                {sectionedTags.recent.length > 0 ? sectionedTags.recent.map(tag => {
+                                                {sectionedTags.recent.length > 0 ? sectionedTags.recent.map((tag, index) => {
                                                     const isSelected = selectedTags.includes(tag);
-                                                    const optionIndex = optionIndexMap.get(tag) ?? -1;
+                                                    const optionIndex = index;
                                                     return (
                                                         <button
                                                             key={`recent-${tag}`}
@@ -553,9 +528,9 @@ const ListLayout: React.FC = () => {
                                         <div>
                                             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">인기 태그</p>
                                             <div className="flex flex-wrap gap-2 px-0.5">
-                                                {sectionedTags.popular.length > 0 ? sectionedTags.popular.map(tag => {
+                                                {sectionedTags.popular.length > 0 ? sectionedTags.popular.map((tag, index) => {
                                                     const isSelected = selectedTags.includes(tag);
-                                                    const optionIndex = optionIndexMap.get(tag) ?? -1;
+                                                    const optionIndex = sectionedTags.recent.length + index;
                                                     return (
                                                         <button
                                                             key={`popular-${tag}`}
