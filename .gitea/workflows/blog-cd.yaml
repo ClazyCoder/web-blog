@@ -15,5 +15,5 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           cd $DEPLOY_PATH
-          git pull origin dev
-          docker compose up -d --build --progress=quiet
+          git pull -q origin dev
+          docker compose up -d --build --quiet-build
