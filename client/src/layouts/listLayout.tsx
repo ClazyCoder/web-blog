@@ -424,7 +424,7 @@ const ListLayout: React.FC = () => {
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
             <div className="max-w-5xl mx-auto px-4 py-8">
                 {/* 헤더 */}
-                <div className="mb-8 animate-fade-in-up">
+                <div className="relative z-30 mb-8 animate-fade-in-up">
                     <div className="flex items-center justify-between mb-6">
                         <div>
                             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -637,7 +637,7 @@ const ListLayout: React.FC = () => {
                 </div>
 
                 {/* 게시글 목록 — 카드 스타일 */}
-                <div className="space-y-3">
+                <div className="relative z-0 space-y-3">
                     {loading ? (
                         // 스켈레톤 로딩
                         [...Array(5)].map((_, i) => (
