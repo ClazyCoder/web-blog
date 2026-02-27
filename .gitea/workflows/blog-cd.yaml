@@ -1,0 +1,19 @@
+name: Blog CD
+run-name: ${{ gitea.actor }} is deploying blog 🚀
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  Deployment:
+    runs-on: blog-cd
+    steps:
+      - name: Deploy blog
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          cd $DEPLOY_PATH
+          git pull -q origin dev
+          docker compose --progress=quiet up -d --build
