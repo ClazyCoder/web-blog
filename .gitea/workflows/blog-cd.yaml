@@ -16,4 +16,4 @@ jobs:
         run: |
           cd $DEPLOY_PATH
           git pull -q origin dev
-          docker compose --progress=quiet up --build
+          docker compose --progress=quiet up -d --build
