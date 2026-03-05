@@ -12,6 +12,7 @@ interface Post {
     tags: string[];
     category_slug: string | null;
     status: string;
+    is_secret: boolean;
     is_published: boolean;
     view_count: number;
     created_at: string;

@@ -10,6 +10,7 @@ interface PostItem {
     tags: string[];
     category_slug: string | null;
     status: string;
+    is_secret: boolean;
     is_published: boolean;
     view_count: number;
     thumbnail: string | null;

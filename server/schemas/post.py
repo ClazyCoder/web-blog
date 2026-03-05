@@ -15,6 +15,7 @@ class PostCreate(BaseModel):
     category_slug: Optional[str] = Field(None, max_length=50, description="카테고리 슬러그")
     tags: List[str] = Field(default_factory=list, description="태그 배열")
     status: str = Field("draft", description="게시 상태: draft, published")
+    is_secret: bool = Field(False, description="비밀글 여부")
     
     @field_validator('title', 'content')
     @classmethod
@@ -65,6 +66,7 @@ class PostUpdate(BaseModel):
     category_slug: Optional[str] = Field(None, max_length=50)
     tags: Optional[List[str]] = None
     status: Optional[str] = None
+    is_secret: Optional[bool] = None
     
     @field_validator('title', 'content')
     @classmethod
@@ -135,6 +137,7 @@ class PostResponse(BaseModel):
     tags: List[str]
     category_slug: Optional[str]
     status: str
+    is_secret: bool = False
     is_published: bool  # 편의성 property
     view_count: int
     thumbnail: Optional[str] = None  # 첫 번째 이미지 URL (썸네일)

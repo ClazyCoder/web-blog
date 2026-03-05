@@ -18,6 +18,7 @@ interface EditorData {
     title: string;
     markdown: string;
     tags: string[];
+    isSecret: boolean;
 }
 
 interface UploadProgress {
@@ -40,7 +41,8 @@ const EditorLayout: React.FC = () => {
     const [editorData, setEditorData] = useState<EditorData>({
         title: '',
         markdown: '',
-        tags: []
+        tags: [],
+        isSecret: false,
     });
     const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -62,7 +64,7 @@ const EditorLayout: React.FC = () => {
 
     // 변경사항 추적 (페이지 이탈 경고용)
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-    const initialDataRef = useRef<EditorData>({ title: '', markdown: '', tags: [] });
+    const initialDataRef = useRef<EditorData>({ title: '', markdown: '', tags: [], isSecret: false });
 
     // 편집 모드: 기존 게시글 로드
     useEffect(() => {
@@ -98,6 +100,7 @@ const EditorLayout: React.FC = () => {
                     title: post.title,
                     markdown: post.content,
                     tags: post.tags || [],
+                    isSecret: Boolean(post.is_secret),
                 };
                 setEditorData(loadedData);
                 initialDataRef.current = loadedData;
@@ -131,7 +134,8 @@ const EditorLayout: React.FC = () => {
         const initial = initialDataRef.current;
         const changed = editorData.title !== initial.title
             || editorData.markdown !== initial.markdown
-            || JSON.stringify(editorData.tags) !== JSON.stringify(initial.tags);
+            || JSON.stringify(editorData.tags) !== JSON.stringify(initial.tags)
+            || editorData.isSecret !== initial.isSecret;
         setHasUnsavedChanges(changed);
     }, [editorData]);
 
@@ -259,6 +263,7 @@ const EditorLayout: React.FC = () => {
                 content: editorData.markdown || ' ',
                 tags: editorData.tags,
                 status: targetStatus,
+                is_secret: editorData.isSecret,
             };
 
             let response;
@@ -307,7 +312,7 @@ const EditorLayout: React.FC = () => {
 
     const handleClear = () => {
         if (confirm('작성 중인 내용을 모두 지우시겠습니까?')) {
-            setEditorData({ title: '', markdown: '', tags: [] });
+            setEditorData({ title: '', markdown: '', tags: [], isSecret: false });
             setUploadedImages([]);
         }
     };
@@ -1140,6 +1145,15 @@ const EditorLayout: React.FC = () => {
                 </div>
                 {/* 태그 영역 */}
                 <div className="flex flex-col gap-2 p-2">
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input
+                            type="checkbox"
+                            checked={editorData.isSecret}
+                            onChange={(e) => setEditorData({ ...editorData, isSecret: e.target.checked })}
+                            className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        비밀글로 설정
+                    </label>
                     <div className="flex items-center gap-2">
                         <input
                             type="text"
