@@ -663,6 +663,10 @@ const EditorLayout: React.FC = () => {
                 newText = `\`\`\`\n${selectedText}\n\`\`\``;
                 cursorOffset = 3;
                 break;
+            case 'table':
+                newText = `| 헤더1 | 헤더2 |\n| --- | --- |\n| 값1 | 값2 |`;
+                cursorOffset = 34;
+                break;
             default:
                 return;
         }
@@ -935,6 +939,9 @@ const EditorLayout: React.FC = () => {
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                             </svg>
+                        </button>
+                        <button onClick={() => insertMarkdown('table')} className="toolbar-btn" title="테이블">
+                            <span className="text-sm font-semibold">⊞</span>
                         </button>
                     </div>
                 </div>
