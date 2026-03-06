@@ -57,6 +57,9 @@ const EditorLayout: React.FC = () => {
     const [editorWidth, setEditorWidth] = useState(50); // 에디터 너비 (%)
     const [isResizing, setIsResizing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const editorTextareaRef = useRef<HTMLTextAreaElement>(null);
+    const previewContainerRef = useRef<HTMLDivElement>(null);
+    const scrollSyncSourceRef = useRef<'editor' | 'preview' | null>(null);
 
     // 임시저장 글 목록 (새 글 작성 모드일 때)
     const [drafts, setDrafts] = useState<{ id: number; title: string; updated_at: string }[]>([]);
@@ -217,6 +220,47 @@ const EditorLayout: React.FC = () => {
             document.body.style.userSelect = '';
         };
     }, [isResizing]);
+
+    const syncScrollByRatio = (source: HTMLElement, target: HTMLElement) => {
+        const sourceScrollable = source.scrollHeight - source.clientHeight;
+        const targetScrollable = target.scrollHeight - target.clientHeight;
+        if (sourceScrollable <= 0 || targetScrollable <= 0) {
+            target.scrollTop = 0;
+            return;
+        }
+        const scrollRatio = source.scrollTop / sourceScrollable;
+        target.scrollTop = scrollRatio * targetScrollable;
+    };
+
+    const handleEditorScroll = () => {
+        const editorEl = editorTextareaRef.current;
+        const previewEl = previewContainerRef.current;
+        if (!editorEl || !previewEl || !showPreview) return;
+        if (scrollSyncSourceRef.current === 'preview') return;
+
+        scrollSyncSourceRef.current = 'editor';
+        syncScrollByRatio(editorEl, previewEl);
+        requestAnimationFrame(() => {
+            if (scrollSyncSourceRef.current === 'editor') {
+                scrollSyncSourceRef.current = null;
+            }
+        });
+    };
+
+    const handlePreviewScroll = () => {
+        const editorEl = editorTextareaRef.current;
+        const previewEl = previewContainerRef.current;
+        if (!editorEl || !previewEl || !showPreview) return;
+        if (scrollSyncSourceRef.current === 'editor') return;
+
+        scrollSyncSourceRef.current = 'preview';
+        syncScrollByRatio(previewEl, editorEl);
+        requestAnimationFrame(() => {
+            if (scrollSyncSourceRef.current === 'preview') {
+                scrollSyncSourceRef.current = null;
+            }
+        });
+    };
 
     const isEditingPublished = !!postId && originalStatus === 'published';
 
@@ -988,8 +1032,10 @@ const EditorLayout: React.FC = () => {
                         )}
                         <textarea
                             id="markdown-editor"
+                            ref={editorTextareaRef}
                             value={editorData.markdown}
                             onChange={(e) => setEditorData({ ...editorData, markdown: e.target.value })}
+                            onScroll={handleEditorScroll}
                             onKeyDown={handleKeyDown}
                             onPaste={handlePaste}
                             placeholder="마크다운으로 작성하세요...&#10;&#10;💡 팁:&#10;  • 이미지를 드래그 앤 드롭하거나&#10;  • Ctrl+V로 클립보드 이미지를 붙여넣거나&#10;  • 툴바의 업로드 버튼을 사용하세요"
@@ -1012,6 +1058,8 @@ const EditorLayout: React.FC = () => {
                     {/* 미리보기 */}
                     {showPreview && (
                         <div
+                            ref={previewContainerRef}
+                            onScroll={handlePreviewScroll}
                             className={`overflow-y-auto bg-white dark:bg-gray-800 ${isPreviewMode ? 'block' : 'hidden lg:block'}`}
                             style={{ width: `${100 - editorWidth}%` }}
                         >
