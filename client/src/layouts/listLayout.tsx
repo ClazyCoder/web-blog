@@ -212,10 +212,15 @@ const ListLayout: React.FC = () => {
         }
     }, [isAuthenticated, showSecretOnly]);
 
-    // 태그 목록 가져오기 (마운트 시 1회)
+    // 태그 목록 가져오기 (비밀글 토글 상태 반영)
     useEffect(() => {
         const controller = new AbortController();
-        api.get('/api/posts/tags', { signal: controller.signal })
+        const params: Record<string, string> = {};
+        if (isAuthenticated && showSecretOnly) {
+            params.secret_only = 'true';
+        }
+
+        api.get('/api/posts/tags', { params, signal: controller.signal })
             .then(res => {
                 const tags: string[] = Array.isArray(res.data?.tags) ? res.data.tags : [];
                 const rawTagCounts: unknown[] = Array.isArray(res.data?.tag_counts) ? res.data.tag_counts : [];
@@ -233,7 +238,7 @@ const ListLayout: React.FC = () => {
                 }
             });
         return () => controller.abort();
-    }, []);
+    }, [isAuthenticated, showSecretOnly]);
 
     useEffect(() => {
         try {

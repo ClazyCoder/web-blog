@@ -332,6 +332,7 @@ async def get_posts(
 
 @router.get("/tags")
 async def get_all_tags(
+    secret_only: bool = Query(False, description="비밀글 태그만 조회 (로그인 사용자 전용)"),
     current_user: Optional[dict] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
@@ -347,7 +348,8 @@ async def get_all_tags(
     """
     # 캐시 시도
     visibility_scope = "auth" if current_user else "public"
-    cache_key = f"cache:posts:tags:{visibility_scope}"
+    cache_secret_scope = "secret" if (current_user and secret_only) else "all"
+    cache_key = f"cache:posts:tags:{visibility_scope}:{cache_secret_scope}"
     cached = await cache_get(cache_key)
     if cached:
         return json.loads(cached)
@@ -360,6 +362,8 @@ async def get_all_tags(
         )
         if not current_user:
             stmt = stmt.where(Post.is_secret.is_(False))
+        elif secret_only:
+            stmt = stmt.where(Post.is_secret.is_(True))
         result = await db.execute(stmt)
         rows = result.scalars().all()
         
