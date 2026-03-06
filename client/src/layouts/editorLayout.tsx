@@ -287,6 +287,29 @@ const EditorLayout: React.FC = () => {
         };
     }, [showPreview]);
 
+    useEffect(() => {
+        if (!showPreview) return;
+
+        const debounceMs = 90;
+        let frame1 = 0;
+        let frame2 = 0;
+
+        // 마크다운 렌더 높이가 변한 뒤 프리뷰 위치를 부드럽게 재동기화한다.
+        const timeoutId = window.setTimeout(() => {
+            frame1 = requestAnimationFrame(() => {
+                frame2 = requestAnimationFrame(() => {
+                    syncPreviewToEditorPosition();
+                });
+            });
+        }, debounceMs);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+            cancelAnimationFrame(frame1);
+            cancelAnimationFrame(frame2);
+        };
+    }, [editorData.markdown, showPreview, editorWidth, isPreviewMode]);
+
     const handleToggleMobilePreviewMode = () => {
         const nextPreviewMode = !isPreviewMode;
         setIsPreviewMode(nextPreviewMode);
