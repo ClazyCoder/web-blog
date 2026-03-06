@@ -7,6 +7,37 @@ from pydantic import BaseModel, Field, field_validator
 import re
 
 
+SCRIPT_TAG_RE = re.compile(r"<script\b[^>]*>.*?</script\s*>", re.IGNORECASE | re.DOTALL)
+BLOCKED_TAG_RE = re.compile(r"</?(?:iframe|object|embed|meta|link|base)\b[^>]*>", re.IGNORECASE)
+EVENT_HANDLER_ATTR_RE = re.compile(
+    r"\s+on[a-zA-Z0-9_-]+\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)",
+    re.IGNORECASE,
+)
+DANGEROUS_URL_ATTR_RE = re.compile(
+    r"\s+(?:href|src|xlink:href|formaction)\s*=\s*"
+    r"(?:\"(?:\s*(?:javascript:|data:text/html)[^\"]*)\""
+    r"|'(?:\s*(?:javascript:|data:text/html)[^']*)'"
+    r"|(?:\s*(?:javascript:|data:text/html)[^\s>]+))",
+    re.IGNORECASE,
+)
+
+
+def sanitize_html_input(value: str) -> str:
+    """
+    XSS 방지용 최소 정제 함수.
+    - 일반 텍스트는 보존
+    - 실제 HTML 태그/script/event-attr/dangerous URL 속성만 제거
+    """
+    if not value:
+        return value
+
+    cleaned = SCRIPT_TAG_RE.sub("", value)
+    cleaned = BLOCKED_TAG_RE.sub("", cleaned)
+    cleaned = EVENT_HANDLER_ATTR_RE.sub("", cleaned)
+    cleaned = DANGEROUS_URL_ATTR_RE.sub("", cleaned)
+    return cleaned
+
+
 class PostCreate(BaseModel):
     """게시글 생성 스키마 (개선 버전)"""
     title: str = Field(..., min_length=1, max_length=200, description="게시글 제목")
@@ -20,16 +51,7 @@ class PostCreate(BaseModel):
     @field_validator('title', 'content')
     @classmethod
     def sanitize_html(cls, v):
-        """XSS 방지: 위험한 스크립트 태그 제거"""
-        if v:
-            dangerous_patterns = [
-                r'<script[^>]*>.*?</script>',
-                r'javascript:',
-                r'on\w+\s*=',  # onclick, onerror 등
-            ]
-            for pattern in dangerous_patterns:
-                v = re.sub(pattern, '', v, flags=re.IGNORECASE | re.DOTALL)
-        return v
+        return sanitize_html_input(v)
     
     @field_validator('tags')
     @classmethod
@@ -71,15 +93,7 @@ class PostUpdate(BaseModel):
     @field_validator('title', 'content')
     @classmethod
     def sanitize_html(cls, v):
-        if v:
-            dangerous_patterns = [
-                r'<script[^>]*>.*?</script>',
-                r'javascript:',
-                r'on\w+\s*=',
-            ]
-            for pattern in dangerous_patterns:
-                v = re.sub(pattern, '', v, flags=re.IGNORECASE | re.DOTALL)
-        return v
+        return sanitize_html_input(v)
     
     @field_validator('tags')
     @classmethod
