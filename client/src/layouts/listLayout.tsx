@@ -322,47 +322,20 @@ const ListLayout: React.FC = () => {
             if (debouncedSelectedTags.length > 0) {
                 baseParams.tags = debouncedSelectedTags.join(',');
             }
-
             if (isAuthenticated && showSecretOnly) {
-                const fetchLimit = 100;
-                let skip = 0;
-                let total = 0;
-                const allItems: Post[] = [];
-
-                do {
-                    const response = await api.get('/api/posts', {
-                        params: {
-                            ...baseParams,
-                            skip,
-                            limit: fetchLimit,
-                        },
-                        signal,
-                    });
-
-                    const fetchedItems: Post[] = Array.isArray(response.data?.items) ? response.data.items : [];
-                    total = typeof response.data?.total === 'number' ? response.data.total : fetchedItems.length;
-                    allItems.push(...fetchedItems);
-                    skip += fetchLimit;
-                } while (allItems.length < total);
-
-                const secretPosts = allItems.filter(post => post.is_secret);
-                const pageStart = (currentPage - 1) * POSTS_PER_PAGE;
-                const pageEnd = pageStart + POSTS_PER_PAGE;
-
-                setPosts(secretPosts.slice(pageStart, pageEnd));
-                setTotalPosts(secretPosts.length);
-            } else {
-                const response = await api.get('/api/posts', {
-                    params: {
-                        ...baseParams,
-                        skip: (currentPage - 1) * POSTS_PER_PAGE,
-                        limit: POSTS_PER_PAGE,
-                    },
-                    signal,
-                });
-                setPosts(response.data.items);
-                setTotalPosts(response.data.total);
+                baseParams.secret_only = 'true';
             }
+
+            const response = await api.get('/api/posts', {
+                params: {
+                    ...baseParams,
+                    skip: (currentPage - 1) * POSTS_PER_PAGE,
+                    limit: POSTS_PER_PAGE,
+                },
+                signal,
+            });
+            setPosts(response.data.items);
+            setTotalPosts(response.data.total);
         } catch (err: unknown) {
             const isCanceled = !!err && typeof err === 'object' && 'name' in err && err.name === 'CanceledError';
             if (!isCanceled) {

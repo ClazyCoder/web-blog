@@ -242,6 +242,7 @@ async def get_posts(
     tags: Optional[str] = Query(None, description="태그 필터 (쉼표 구분, 예: python,fastapi)"),
     search: Optional[str] = Query(None, description="검색어 (제목, 내용)"),
     post_status: Optional[str] = Query(None, alias="status", description="상태 필터: draft, published"),
+    secret_only: bool = Query(False, description="비밀글만 조회 (로그인 사용자 전용)"),
     current_user: Optional[dict] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
@@ -253,8 +254,9 @@ async def get_posts(
     use_cache = search is None
     visibility_scope = "auth" if current_user else "public"
     cache_key = ""
+    cache_secret_scope = "secret" if (current_user and secret_only) else "all"
     if use_cache:
-        cache_key = f"cache:posts:list:{visibility_scope}:{post_status or 'all'}:{category_slug or 'none'}:{tags or 'none'}:{skip}:{limit}"
+        cache_key = f"cache:posts:list:{visibility_scope}:{cache_secret_scope}:{post_status or 'all'}:{category_slug or 'none'}:{tags or 'none'}:{skip}:{limit}"
         cached = await cache_get(cache_key)
         if cached:
             return PaginatedPostResponse(**json.loads(cached))
@@ -264,6 +266,8 @@ async def get_posts(
         conditions = [Post.deleted_at.is_(None)]
         if not current_user:
             conditions.append(Post.is_secret.is_(False))
+        elif secret_only:
+            conditions.append(Post.is_secret.is_(True))
         
         if post_status:
             conditions.append(Post.status == post_status)
