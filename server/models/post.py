@@ -2,7 +2,7 @@
 Post 모델 - 블로그 게시글
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from typing import Optional
@@ -32,6 +32,7 @@ class Post(Base):
     # 상태 관리
     status = Column(String(20), default="draft",
                     index=True)  # draft, published
+    is_secret = Column(Boolean, default=False, nullable=False, index=True)
 
     # 통계
     view_count = Column(Integer, default=0)
@@ -98,6 +99,7 @@ class Post(Base):
             "tags": self.tags or [],  # JSON 배열 그대로 반환
             "category_slug": self.category_slug,
             "status": self.status,
+            "is_secret": self.is_secret,
             "is_published": self.is_published,  # 편의성 property
             "view_count": self.view_count,
             "thumbnail": self.thumbnail,  # 첫 번째 이미지 URL

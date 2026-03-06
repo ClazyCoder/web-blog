@@ -18,6 +18,7 @@ interface EditorData {
     title: string;
     markdown: string;
     tags: string[];
+    isSecret: boolean;
 }
 
 interface UploadProgress {
@@ -40,7 +41,8 @@ const EditorLayout: React.FC = () => {
     const [editorData, setEditorData] = useState<EditorData>({
         title: '',
         markdown: '',
-        tags: []
+        tags: [],
+        isSecret: false,
     });
     const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -55,6 +57,9 @@ const EditorLayout: React.FC = () => {
     const [editorWidth, setEditorWidth] = useState(50); // 에디터 너비 (%)
     const [isResizing, setIsResizing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const editorTextareaRef = useRef<HTMLTextAreaElement>(null);
+    const previewContainerRef = useRef<HTMLDivElement>(null);
+    const scrollSyncSourceRef = useRef<'editor' | 'preview' | null>(null);
 
     // 임시저장 글 목록 (새 글 작성 모드일 때)
     const [drafts, setDrafts] = useState<{ id: number; title: string; updated_at: string }[]>([]);
@@ -62,7 +67,7 @@ const EditorLayout: React.FC = () => {
 
     // 변경사항 추적 (페이지 이탈 경고용)
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-    const initialDataRef = useRef<EditorData>({ title: '', markdown: '', tags: [] });
+    const initialDataRef = useRef<EditorData>({ title: '', markdown: '', tags: [], isSecret: false });
 
     // 편집 모드: 기존 게시글 로드
     useEffect(() => {
@@ -98,6 +103,7 @@ const EditorLayout: React.FC = () => {
                     title: post.title,
                     markdown: post.content,
                     tags: post.tags || [],
+                    isSecret: Boolean(post.is_secret),
                 };
                 setEditorData(loadedData);
                 initialDataRef.current = loadedData;
@@ -131,7 +137,8 @@ const EditorLayout: React.FC = () => {
         const initial = initialDataRef.current;
         const changed = editorData.title !== initial.title
             || editorData.markdown !== initial.markdown
-            || JSON.stringify(editorData.tags) !== JSON.stringify(initial.tags);
+            || JSON.stringify(editorData.tags) !== JSON.stringify(initial.tags)
+            || editorData.isSecret !== initial.isSecret;
         setHasUnsavedChanges(changed);
     }, [editorData]);
 
@@ -214,6 +221,109 @@ const EditorLayout: React.FC = () => {
         };
     }, [isResizing]);
 
+    const syncScrollByRatio = (source: HTMLElement, target: HTMLElement) => {
+        const sourceScrollable = source.scrollHeight - source.clientHeight;
+        const targetScrollable = target.scrollHeight - target.clientHeight;
+        if (sourceScrollable <= 0 || targetScrollable <= 0) {
+            target.scrollTop = 0;
+            return;
+        }
+        const scrollRatio = source.scrollTop / sourceScrollable;
+        target.scrollTop = scrollRatio * targetScrollable;
+    };
+
+    const handleEditorScroll = () => {
+        const editorEl = editorTextareaRef.current;
+        const previewEl = previewContainerRef.current;
+        if (!editorEl || !previewEl || !showPreview) return;
+        if (scrollSyncSourceRef.current === 'preview') return;
+
+        scrollSyncSourceRef.current = 'editor';
+        syncScrollByRatio(editorEl, previewEl);
+        requestAnimationFrame(() => {
+            if (scrollSyncSourceRef.current === 'editor') {
+                scrollSyncSourceRef.current = null;
+            }
+        });
+    };
+
+    const handlePreviewScroll = () => {
+        const editorEl = editorTextareaRef.current;
+        const previewEl = previewContainerRef.current;
+        if (!editorEl || !previewEl || !showPreview) return;
+        if (scrollSyncSourceRef.current === 'editor') return;
+
+        scrollSyncSourceRef.current = 'preview';
+        syncScrollByRatio(previewEl, editorEl);
+        requestAnimationFrame(() => {
+            if (scrollSyncSourceRef.current === 'preview') {
+                scrollSyncSourceRef.current = null;
+            }
+        });
+    };
+
+    const syncPreviewToEditorPosition = () => {
+        const editorEl = editorTextareaRef.current;
+        const previewEl = previewContainerRef.current;
+        if (!editorEl || !previewEl) return;
+        syncScrollByRatio(editorEl, previewEl);
+    };
+
+    useEffect(() => {
+        if (!showPreview) return;
+
+        let frame1 = 0;
+        let frame2 = 0;
+        frame1 = requestAnimationFrame(() => {
+            // 레이아웃 계산이 끝난 다음 프리뷰 스크롤을 현재 편집 위치에 맞춘다.
+            frame2 = requestAnimationFrame(() => {
+                syncPreviewToEditorPosition();
+            });
+        });
+
+        return () => {
+            cancelAnimationFrame(frame1);
+            cancelAnimationFrame(frame2);
+        };
+    }, [showPreview]);
+
+    useEffect(() => {
+        if (!showPreview) return;
+
+        const debounceMs = 90;
+        let frame1 = 0;
+        let frame2 = 0;
+
+        // 마크다운 렌더 높이가 변한 뒤 프리뷰 위치를 부드럽게 재동기화한다.
+        const timeoutId = window.setTimeout(() => {
+            frame1 = requestAnimationFrame(() => {
+                frame2 = requestAnimationFrame(() => {
+                    syncPreviewToEditorPosition();
+                });
+            });
+        }, debounceMs);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+            cancelAnimationFrame(frame1);
+            cancelAnimationFrame(frame2);
+        };
+    }, [editorData.markdown, showPreview, editorWidth, isPreviewMode]);
+
+    const handleToggleMobilePreviewMode = () => {
+        const nextPreviewMode = !isPreviewMode;
+        setIsPreviewMode(nextPreviewMode);
+        if (nextPreviewMode) {
+            requestAnimationFrame(() => {
+                syncPreviewToEditorPosition();
+            });
+        }
+    };
+
+    const handleTogglePreviewVisibility = () => {
+        setShowPreview((prev) => !prev);
+    };
+
     const isEditingPublished = !!postId && originalStatus === 'published';
 
     // 세션 만료(401) 시 편집 내용을 보존하면서 재로그인 안내
@@ -259,6 +369,7 @@ const EditorLayout: React.FC = () => {
                 content: editorData.markdown || ' ',
                 tags: editorData.tags,
                 status: targetStatus,
+                is_secret: editorData.isSecret,
             };
 
             let response;
@@ -307,7 +418,7 @@ const EditorLayout: React.FC = () => {
 
     const handleClear = () => {
         if (confirm('작성 중인 내용을 모두 지우시겠습니까?')) {
-            setEditorData({ title: '', markdown: '', tags: [] });
+            setEditorData({ title: '', markdown: '', tags: [], isSecret: false });
             setUploadedImages([]);
         }
     };
@@ -658,6 +769,10 @@ const EditorLayout: React.FC = () => {
                 newText = `\`\`\`\n${selectedText}\n\`\`\``;
                 cursorOffset = 3;
                 break;
+            case 'table':
+                newText = `| 헤더1 | 헤더2 |\n| --- | --- |\n| 값1 | 값2 |`;
+                cursorOffset = 34;
+                break;
             default:
                 return;
         }
@@ -813,14 +928,14 @@ const EditorLayout: React.FC = () => {
                         <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
                             {/* 모바일 전용 편집/미리보기 토글 */}
                             <button
-                                onClick={() => setIsPreviewMode(!isPreviewMode)}
+                                onClick={handleToggleMobilePreviewMode}
                                 className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors lg:hidden whitespace-nowrap"
                             >
                                 {isPreviewMode ? '편집' : '미리보기'}
                             </button>
                             {/* 데스크탑 전용 미리보기 토글 */}
                             <button
-                                onClick={() => setShowPreview(!showPreview)}
+                                onClick={handleTogglePreviewVisibility}
                                 className="hidden lg:flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                                 title={showPreview ? '미리보기 숨기기' : '미리보기 보기'}
                             >
@@ -931,6 +1046,9 @@ const EditorLayout: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                             </svg>
                         </button>
+                        <button onClick={() => insertMarkdown('table')} className="toolbar-btn" title="테이블">
+                            <span className="text-sm font-semibold">⊞</span>
+                        </button>
                     </div>
                 </div>
 
@@ -976,8 +1094,10 @@ const EditorLayout: React.FC = () => {
                         )}
                         <textarea
                             id="markdown-editor"
+                            ref={editorTextareaRef}
                             value={editorData.markdown}
                             onChange={(e) => setEditorData({ ...editorData, markdown: e.target.value })}
+                            onScroll={handleEditorScroll}
                             onKeyDown={handleKeyDown}
                             onPaste={handlePaste}
                             placeholder="마크다운으로 작성하세요...&#10;&#10;💡 팁:&#10;  • 이미지를 드래그 앤 드롭하거나&#10;  • Ctrl+V로 클립보드 이미지를 붙여넣거나&#10;  • 툴바의 업로드 버튼을 사용하세요"
@@ -1000,6 +1120,8 @@ const EditorLayout: React.FC = () => {
                     {/* 미리보기 */}
                     {showPreview && (
                         <div
+                            ref={previewContainerRef}
+                            onScroll={handlePreviewScroll}
                             className={`overflow-y-auto bg-white dark:bg-gray-800 ${isPreviewMode ? 'block' : 'hidden lg:block'}`}
                             style={{ width: `${100 - editorWidth}%` }}
                         >
@@ -1140,6 +1262,15 @@ const EditorLayout: React.FC = () => {
                 </div>
                 {/* 태그 영역 */}
                 <div className="flex flex-col gap-2 p-2">
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input
+                            type="checkbox"
+                            checked={editorData.isSecret}
+                            onChange={(e) => setEditorData({ ...editorData, isSecret: e.target.checked })}
+                            className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        비밀글로 설정
+                    </label>
                     <div className="flex items-center gap-2">
                         <input
                             type="text"

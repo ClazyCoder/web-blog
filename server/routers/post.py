@@ -16,7 +16,7 @@ from db.session import get_db
 from db.redis import cache_get, cache_set, cache_delete_pattern, check_and_set_view
 from models.post import Post
 from models.image import Image
-from auth import get_current_user
+from auth import get_current_user, get_current_user_optional
 from schemas.post import PostCreate, PostUpdate, PostResponse, PaginatedPostResponse
 from rate_limit import limiter, get_client_ip
 
@@ -179,6 +179,7 @@ async def create_post(
             category_slug=post_data.category_slug,
             tags=post_data.tags,
             status=post_data.status,
+            is_secret=post_data.is_secret,
             slug="temporary",
             created_at=now,
             updated_at=now,
@@ -215,6 +216,7 @@ async def create_post(
             tags=new_post.tags or [],
             category_slug=new_post.category_slug,
             status=new_post.status,
+            is_secret=new_post.is_secret,
             is_published=new_post.status == "published",
             view_count=0,
             thumbnail=thumbnail_url,
@@ -240,6 +242,8 @@ async def get_posts(
     tags: Optional[str] = Query(None, description="태그 필터 (쉼표 구분, 예: python,fastapi)"),
     search: Optional[str] = Query(None, description="검색어 (제목, 내용)"),
     post_status: Optional[str] = Query(None, alias="status", description="상태 필터: draft, published"),
+    secret_only: bool = Query(False, description="비밀글만 조회 (로그인 사용자 전용)"),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -248,9 +252,11 @@ async def get_posts(
     """
     # 검색어가 없으면 캐시 시도
     use_cache = search is None
+    visibility_scope = "auth" if current_user else "public"
     cache_key = ""
+    cache_secret_scope = "secret" if (current_user and secret_only) else "all"
     if use_cache:
-        cache_key = f"cache:posts:list:{post_status or 'all'}:{category_slug or 'none'}:{tags or 'none'}:{skip}:{limit}"
+        cache_key = f"cache:posts:list:{visibility_scope}:{cache_secret_scope}:{post_status or 'all'}:{category_slug or 'none'}:{tags or 'none'}:{skip}:{limit}"
         cached = await cache_get(cache_key)
         if cached:
             return PaginatedPostResponse(**json.loads(cached))
@@ -258,6 +264,10 @@ async def get_posts(
     try:
         # WHERE 조건 리스트
         conditions = [Post.deleted_at.is_(None)]
+        if not current_user:
+            conditions.append(Post.is_secret.is_(False))
+        elif secret_only:
+            conditions.append(Post.is_secret.is_(True))
         
         if post_status:
             conditions.append(Post.status == post_status)
@@ -322,6 +332,8 @@ async def get_posts(
 
 @router.get("/tags")
 async def get_all_tags(
+    secret_only: bool = Query(False, description="비밀글 태그만 조회 (로그인 사용자 전용)"),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -335,7 +347,9 @@ async def get_all_tags(
         }
     """
     # 캐시 시도
-    cache_key = "cache:posts:tags"
+    visibility_scope = "auth" if current_user else "public"
+    cache_secret_scope = "secret" if (current_user and secret_only) else "all"
+    cache_key = f"cache:posts:tags:{visibility_scope}:{cache_secret_scope}"
     cached = await cache_get(cache_key)
     if cached:
         return json.loads(cached)
@@ -346,6 +360,10 @@ async def get_all_tags(
             Post.status == "published",
             Post.tags.isnot(None),
         )
+        if not current_user:
+            stmt = stmt.where(Post.is_secret.is_(False))
+        elif secret_only:
+            stmt = stmt.where(Post.is_secret.is_(True))
         result = await db.execute(stmt)
         rows = result.scalars().all()
         
@@ -379,13 +397,15 @@ async def get_all_tags(
 @router.get("/{post_id}", response_model=PostResponse)
 async def get_post(
     post_id: int,
+    current_user: Optional[dict] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
     게시글 상세 조회 (Redis 캐시 활용, TTL 10분)
     """
     # 캐시 시도
-    cache_key = f"cache:posts:detail:{post_id}"
+    visibility_scope = "auth" if current_user else "public"
+    cache_key = f"cache:posts:detail:{visibility_scope}:{post_id}"
     cached = await cache_get(cache_key)
     if cached:
         return PostResponse(**json.loads(cached))
@@ -399,6 +419,11 @@ async def get_post(
     post = result.scalar_one_or_none()
     
     if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="게시글을 찾을 수 없습니다"
+        )
+    if not current_user and post.is_secret:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="게시글을 찾을 수 없습니다"
@@ -546,13 +571,15 @@ async def delete_post(
 @router.get("/slug/{slug}", response_model=PostResponse)
 async def get_post_by_slug(
     slug: str,
+    current_user: Optional[dict] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
     슬러그로 게시글 조회 (Redis 캐시 활용, TTL 10분)
     """
     # 캐시 시도
-    cache_key = f"cache:posts:slug:{slug}"
+    visibility_scope = "auth" if current_user else "public"
+    cache_key = f"cache:posts:slug:{visibility_scope}:{slug}"
     cached = await cache_get(cache_key)
     if cached:
         return PostResponse(**json.loads(cached))
@@ -566,6 +593,11 @@ async def get_post_by_slug(
     post = result.scalar_one_or_none()
     
     if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="게시글을 찾을 수 없습니다"
+        )
+    if not current_user and post.is_secret:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="게시글을 찾을 수 없습니다"

@@ -10,6 +10,7 @@ interface PostItem {
     tags: string[];
     category_slug: string | null;
     status: string;
+    is_secret: boolean;
     is_published: boolean;
     view_count: number;
     thumbnail: string | null;
@@ -140,11 +141,11 @@ const BoardLayout: React.FC = () => {
                             <ContentCard
                                 key={post.id}
                                 id={String(post.id)}
-                                title={post.title}
+                                title={post.is_secret ? `🔒 ${post.title}` : post.title}
                                 text={post.excerpt || ''}
                                 last_updated={formatDate(post.created_at)}
                                 imgSrc={post.thumbnail || '/placeholder.png'}
-                                tags={post.tags}
+                                tags={post.is_secret ? ['🔒 비밀글', ...post.tags] : post.tags}
                                 index={index}
                             />
                         ))}

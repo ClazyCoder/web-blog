@@ -58,6 +58,7 @@ web-blog/
 | 임시 저장/발행 | 초안(draft) 모드와 발행(published) 모드 분리 |
 | 임시저장 배너 | 새 글 작성 시 기존 임시저장 글 목록 표시 및 이어쓰기 |
 | 태그 시스템 | 포스트당 최대 10개 태그, 태그 기반 필터링, 전체 태그 목록 API |
+| 비밀글 | 작성 시 비밀글 설정, 로그인 사용자 전용 조회, 목록에서 비밀글 전용 필터 제공 |
 | 검색 | 제목/내용 전문 검색 (대소문자 무시) |
 | 페이지네이션 | 목록 페이지 단위 페이지 처리 |
 | 조회수 추적 | 별도 POST 엔드포인트, Redis 기반 IP 중복 조회 방지 (1시간 TTL) |
@@ -110,6 +111,7 @@ web-blog/
 | 반응형 디자인 | 모바일/태블릿/데스크톱 대응 (Tailwind CSS) |
 | 다크 모드 | 시스템 테마 자동 감지 (`prefers-color-scheme`) |
 | 반응형 에디터 | 모바일: 편집/미리보기 토글, 데스크톱: 분할 화면 + 리사이징 |
+| 스크롤 동기화 | 에디터와 미리보기 스크롤 비율 동기화 + 렌더 후 위치 재동기화 |
 | 미저장 변경 감지 | 에디터에서 이탈 시 확인 다이얼로그 (beforeunload + SPA 가드) |
 | 세션 만료 대응 | 에디터에서 세션 만료 시 작성 중 내용 보존 + 자동 토큰 갱신 시도 |
 | 로딩/에러 상태 | 모든 비동기 요청에 대한 상태 처리 |
@@ -122,10 +124,10 @@ web-blog/
 | Rate Limiting | slowapi 내부 관리 | 자동 | 분산 환경에서 모든 워커가 동일한 카운터 공유 |
 | 토큰 블랙리스트 | `blacklist:{jti}` | 토큰 남은 수명 | 로그아웃/토큰 회전 시 즉시 무효화 |
 | 조회수 중복 방지 | `view:{post_id}:{ip}` | 1시간 | 같은 IP의 반복 조회 카운트 차단 |
-| 게시글 목록 캐싱 | `cache:posts:list:{params}` | 5분 | 검색어 없는 목록 요청 캐싱 |
-| 태그 목록 캐싱 | `cache:posts:tags` | 10분 | 전체 태그 목록 캐싱 |
-| 게시글 상세 캐싱 | `cache:posts:detail:{id}` | 10분 | published 게시글 개별 캐싱 |
-| 슬러그 조회 캐싱 | `cache:posts:slug:{slug}` | 10분 | 슬러그 기반 조회 캐싱 |
+| 게시글 목록 캐싱 | `cache:posts:list:{visibility}:{secret_scope}:{params}` | 5분 | 검색어 없는 목록 요청 캐싱 (공개/인증/비밀글 범위 분리) |
+| 태그 목록 캐싱 | `cache:posts:tags:{visibility}:{secret_scope}` | 10분 | 태그 목록 캐싱 (공개/인증/비밀글 범위 분리) |
+| 게시글 상세 캐싱 | `cache:posts:detail:{visibility}:{id}` | 10분 | 상세 조회 캐싱 (공개/인증 범위 분리) |
+| 슬러그 조회 캐싱 | `cache:posts:slug:{visibility}:{slug}` | 10분 | 슬러그 조회 캐싱 (공개/인증 범위 분리) |
 | 분산 락 | `lock:{name}` | 10분 | 이미지 클린업 스케줄러 중복 실행 방지 |
 
 - **Graceful Degradation**: `REDIS_URL` 미설정 또는 Redis 미연결 시 모든 Redis 기능이 무시되고 기존과 동일하게 동작 (개발 환경에서 Redis 없이도 정상 동작)
@@ -184,10 +186,10 @@ web-blog/
 | Method | Path | 설명 | 인증 |
 |--------|------|------|------|
 | `POST` | `/api/posts` | 포스트 생성 | 필요 |
-| `GET` | `/api/posts` | 포스트 목록 (페이지네이션, 필터) | - |
-| `GET` | `/api/posts/tags` | 전체 태그 목록 (published 게시글 기준) | - |
-| `GET` | `/api/posts/{id}` | 포스트 상세 조회 | - |
-| `GET` | `/api/posts/slug/{slug}` | 슬러그로 포스트 조회 | - |
+| `GET` | `/api/posts` | 포스트 목록 (페이지네이션, 검색/태그/상태 필터, `secret_only` 지원) | - |
+| `GET` | `/api/posts/tags` | 전체 태그 목록 (`secret_only` 지원, published 게시글 기준) | - |
+| `GET` | `/api/posts/{id}` | 포스트 상세 조회 (비로그인 사용자는 비밀글 조회 불가) | - |
+| `GET` | `/api/posts/slug/{slug}` | 슬러그로 포스트 조회 (비로그인 사용자는 비밀글 조회 불가) | - |
 | `POST` | `/api/posts/{id}/view` | 조회수 증가 | - |
 | `PUT` | `/api/posts/{id}` | 포스트 수정 | 필요 |
 | `DELETE` | `/api/posts/{id}` | 포스트 삭제 (`?permanent=true` 영구 삭제) | 필요 |
@@ -430,10 +432,11 @@ pytest
 │ tags        (JSON)       │  │    │ width / height           │
 │ category_slug (String)   │  │    │ alt_text / caption       │
 │ status      (String)     │  └───>│ post_id     (FK)         │
-│ view_count  (Integer)    │       │ is_temporary (Boolean)   │
-│ created_at  (DateTime)   │       │ created_at  (DateTime)   │
-│ updated_at  (DateTime)   │       │ updated_at  (DateTime)   │
-│ published_at (DateTime)  │       │ deleted_at  (DateTime)   │
+│ is_secret   (Boolean)    │       │ is_temporary (Boolean)   │
+│ view_count  (Integer)    │       │ created_at  (DateTime)   │
+│ created_at  (DateTime)   │       │ updated_at  (DateTime)   │
+│ updated_at  (DateTime)   │       │ deleted_at  (DateTime)   │
+│ published_at (DateTime)  │       │                           │
 │ deleted_at  (DateTime)   │       └──────────────────────────┘
 └──────────────────────────┘
 ```

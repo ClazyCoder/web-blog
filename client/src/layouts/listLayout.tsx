@@ -12,6 +12,7 @@ interface Post {
     tags: string[];
     category_slug: string | null;
     status: string;
+    is_secret: boolean;
     is_published: boolean;
     view_count: number;
     created_at: string;
@@ -71,6 +72,7 @@ const ListLayout: React.FC = () => {
         const tagsParam = searchParams.get('tags');
         return tagsParam ? tagsParam.split(',').filter(Boolean) : [];
     });
+    const [showSecretOnly, setShowSecretOnly] = useState(() => searchParams.get('secret') === '1');
     const [currentPage, setCurrentPage] = useState(() => {
         const pageParam = searchParams.get('page');
         return pageParam ? Math.max(1, parseInt(pageParam, 10) || 1) : 1;
@@ -197,15 +199,28 @@ const ListLayout: React.FC = () => {
         const params: Record<string, string> = {};
         if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
         if (debouncedSelectedTags.length > 0) params.tags = debouncedSelectedTags.join(',');
+        if (isAuthenticated && showSecretOnly) params.secret = '1';
         if (currentPage > 1) params.page = String(currentPage);
 
         setSearchParams(params, { replace: true });
-    }, [debouncedSearch, debouncedSelectedTags, currentPage, setSearchParams]);
+    }, [debouncedSearch, debouncedSelectedTags, currentPage, isAuthenticated, setSearchParams, showSecretOnly]);
 
-    // 태그 목록 가져오기 (마운트 시 1회)
+    useEffect(() => {
+        if (!isAuthenticated && showSecretOnly) {
+            setShowSecretOnly(false);
+            setCurrentPage(1);
+        }
+    }, [isAuthenticated, showSecretOnly]);
+
+    // 태그 목록 가져오기 (비밀글 토글 상태 반영)
     useEffect(() => {
         const controller = new AbortController();
-        api.get('/api/posts/tags', { signal: controller.signal })
+        const params: Record<string, string> = {};
+        if (isAuthenticated && showSecretOnly) {
+            params.secret_only = 'true';
+        }
+
+        api.get('/api/posts/tags', { params, signal: controller.signal })
             .then(res => {
                 const tags: string[] = Array.isArray(res.data?.tags) ? res.data.tags : [];
                 const rawTagCounts: unknown[] = Array.isArray(res.data?.tag_counts) ? res.data.tag_counts : [];
@@ -223,7 +238,7 @@ const ListLayout: React.FC = () => {
                 }
             });
         return () => controller.abort();
-    }, []);
+    }, [isAuthenticated, showSecretOnly]);
 
     useEffect(() => {
         try {
@@ -302,20 +317,28 @@ const ListLayout: React.FC = () => {
     const fetchPosts = useCallback(async (signal?: AbortSignal) => {
         try {
             setLoading(true);
-            const params: Record<string, string | number> = {
-                skip: (currentPage - 1) * POSTS_PER_PAGE,
-                limit: POSTS_PER_PAGE,
+            const baseParams: Record<string, string | number> = {
                 status: 'published',
             };
 
             if (debouncedSearch.trim()) {
-                params.search = debouncedSearch.trim();
+                baseParams.search = debouncedSearch.trim();
             }
             if (debouncedSelectedTags.length > 0) {
-                params.tags = debouncedSelectedTags.join(',');
+                baseParams.tags = debouncedSelectedTags.join(',');
+            }
+            if (isAuthenticated && showSecretOnly) {
+                baseParams.secret_only = 'true';
             }
 
-            const response = await api.get('/api/posts', { params, signal });
+            const response = await api.get('/api/posts', {
+                params: {
+                    ...baseParams,
+                    skip: (currentPage - 1) * POSTS_PER_PAGE,
+                    limit: POSTS_PER_PAGE,
+                },
+                signal,
+            });
             setPosts(response.data.items);
             setTotalPosts(response.data.total);
         } catch (err: unknown) {
@@ -326,7 +349,7 @@ const ListLayout: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [currentPage, debouncedSearch, debouncedSelectedTags]);
+    }, [currentPage, debouncedSearch, debouncedSelectedTags, isAuthenticated, showSecretOnly]);
 
     // 디바운스된 검색어/태그/페이지 변경 시 데이터 로드
     useEffect(() => {
@@ -338,6 +361,11 @@ const ListLayout: React.FC = () => {
     // 검색어 변경 시 1페이지로 리셋
     const handleSearchChange = (value: string) => {
         setSearchTerm(value);
+        setCurrentPage(1);
+    };
+
+    const handleSecretOnlyToggle = () => {
+        setShowSecretOnly(prev => !prev);
         setCurrentPage(1);
     };
 
@@ -488,6 +516,24 @@ const ListLayout: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                     </div>
+                    {isAuthenticated && (
+                        <div className="mb-4 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={handleSecretOnlyToggle}
+                                aria-pressed={showSecretOnly}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${showSecretOnly
+                                    ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                                    : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                    }`}
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 0h10.5A1.5 1.5 0 0118.75 12v6.75a1.5 1.5 0 01-1.5 1.5H6.75a1.5 1.5 0 01-1.5-1.5V12a1.5 1.5 0 011.5-1.5z" />
+                                </svg>
+                                비밀글만
+                            </button>
+                        </div>
+                    )}
 
                     {/* 태그 칩 필터 */}
                     {allTags.length > 0 && (
@@ -734,17 +780,38 @@ const ListLayout: React.FC = () => {
                             <div
                                 key={post.id}
                                 onClick={() => handlePostClick(post.id)}
-                                className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700/50 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-emerald-200 dark:hover:border-emerald-800 hover:-translate-y-0.5 animate-fade-in-up"
+                                className={`group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 animate-fade-in-up ${post.is_secret
+                                    ? 'border-amber-200/80 dark:border-amber-800/60 hover:border-amber-300 dark:hover:border-amber-700'
+                                    : 'border-gray-100 dark:border-gray-700/50 hover:border-emerald-200 dark:hover:border-emerald-800'
+                                    }`}
                                 style={{ animationDelay: `${index * 50}ms` }}
                             >
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="flex-1 min-w-0">
-                                        <h3 className="font-semibold text-gray-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-1 text-[15px]">
-                                            {post.title}
-                                        </h3>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className={`font-semibold text-gray-900 dark:text-white transition-colors line-clamp-1 text-[15px] ${post.is_secret
+                                                ? 'group-hover:text-amber-600 dark:group-hover:text-amber-400'
+                                                : 'group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
+                                                }`}>
+                                                {post.title}
+                                            </h3>
+                                            {post.is_secret && (
+                                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 shrink-0">
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 0h10.5A1.5 1.5 0 0118.75 12v6.75a1.5 1.5 0 01-1.5 1.5H6.75a1.5 1.5 0 01-1.5-1.5V12a1.5 1.5 0 011.5-1.5z" />
+                                                    </svg>
+                                                    비밀글
+                                                </span>
+                                            )}
+                                        </div>
 
                                         {/* 태그 */}
                                         <div className="flex flex-wrap items-center gap-2 mt-2">
+                                            {post.is_secret && (
+                                                <span className="text-xs px-2.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full font-medium">
+                                                    🔒 비밀
+                                                </span>
+                                            )}
                                             {post.tags.map(tag => (
                                                 <span
                                                     key={tag}

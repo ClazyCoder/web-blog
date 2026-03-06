@@ -353,6 +353,7 @@ async def get_current_user(
 
 # 선택적 인증 (인증되지 않아도 접근 가능, 인증된 경우 사용자 정보 제공)
 async def get_current_user_optional(
+    access_token: Optional[str] = Cookie(None, alias="access_token"),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(
         HTTPBearer(auto_error=False))
 ) -> Optional[dict]:
@@ -369,10 +370,13 @@ async def get_current_user_optional(
             # 비인증 사용자를 위한 로직
             pass
     """
-    if credentials is None:
+    if not access_token and credentials is None:
         return None
 
     try:
-        return await get_current_user(credentials)
+        return await get_current_user(
+            access_token=access_token,
+            credentials=credentials,
+        )
     except HTTPException:
         return None
