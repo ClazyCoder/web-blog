@@ -735,17 +735,38 @@ const ListLayout: React.FC = () => {
                             <div
                                 key={post.id}
                                 onClick={() => handlePostClick(post.id)}
-                                className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700/50 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-emerald-200 dark:hover:border-emerald-800 hover:-translate-y-0.5 animate-fade-in-up"
+                                className={`group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 animate-fade-in-up ${post.is_secret
+                                    ? 'border-amber-200/80 dark:border-amber-800/60 hover:border-amber-300 dark:hover:border-amber-700'
+                                    : 'border-gray-100 dark:border-gray-700/50 hover:border-emerald-200 dark:hover:border-emerald-800'
+                                    }`}
                                 style={{ animationDelay: `${index * 50}ms` }}
                             >
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="flex-1 min-w-0">
-                                        <h3 className="font-semibold text-gray-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-1 text-[15px]">
-                                            {post.title}
-                                        </h3>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className={`font-semibold text-gray-900 dark:text-white transition-colors line-clamp-1 text-[15px] ${post.is_secret
+                                                ? 'group-hover:text-amber-600 dark:group-hover:text-amber-400'
+                                                : 'group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
+                                                }`}>
+                                                {post.title}
+                                            </h3>
+                                            {post.is_secret && (
+                                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 shrink-0">
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 0h10.5A1.5 1.5 0 0118.75 12v6.75a1.5 1.5 0 01-1.5 1.5H6.75a1.5 1.5 0 01-1.5-1.5V12a1.5 1.5 0 011.5-1.5z" />
+                                                    </svg>
+                                                    비밀글
+                                                </span>
+                                            )}
+                                        </div>
 
                                         {/* 태그 */}
                                         <div className="flex flex-wrap items-center gap-2 mt-2">
+                                            {post.is_secret && (
+                                                <span className="text-xs px-2.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full font-medium">
+                                                    🔒 비밀
+                                                </span>
+                                            )}
                                             {post.tags.map(tag => (
                                                 <span
                                                     key={tag}
