@@ -72,6 +72,7 @@ const ListLayout: React.FC = () => {
         const tagsParam = searchParams.get('tags');
         return tagsParam ? tagsParam.split(',').filter(Boolean) : [];
     });
+    const [showSecretOnly, setShowSecretOnly] = useState(() => searchParams.get('secret') === '1');
     const [currentPage, setCurrentPage] = useState(() => {
         const pageParam = searchParams.get('page');
         return pageParam ? Math.max(1, parseInt(pageParam, 10) || 1) : 1;
@@ -198,10 +199,18 @@ const ListLayout: React.FC = () => {
         const params: Record<string, string> = {};
         if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
         if (debouncedSelectedTags.length > 0) params.tags = debouncedSelectedTags.join(',');
+        if (isAuthenticated && showSecretOnly) params.secret = '1';
         if (currentPage > 1) params.page = String(currentPage);
 
         setSearchParams(params, { replace: true });
-    }, [debouncedSearch, debouncedSelectedTags, currentPage, setSearchParams]);
+    }, [debouncedSearch, debouncedSelectedTags, currentPage, isAuthenticated, setSearchParams, showSecretOnly]);
+
+    useEffect(() => {
+        if (!isAuthenticated && showSecretOnly) {
+            setShowSecretOnly(false);
+            setCurrentPage(1);
+        }
+    }, [isAuthenticated, showSecretOnly]);
 
     // 태그 목록 가져오기 (마운트 시 1회)
     useEffect(() => {
@@ -303,22 +312,57 @@ const ListLayout: React.FC = () => {
     const fetchPosts = useCallback(async (signal?: AbortSignal) => {
         try {
             setLoading(true);
-            const params: Record<string, string | number> = {
-                skip: (currentPage - 1) * POSTS_PER_PAGE,
-                limit: POSTS_PER_PAGE,
+            const baseParams: Record<string, string | number> = {
                 status: 'published',
             };
 
             if (debouncedSearch.trim()) {
-                params.search = debouncedSearch.trim();
+                baseParams.search = debouncedSearch.trim();
             }
             if (debouncedSelectedTags.length > 0) {
-                params.tags = debouncedSelectedTags.join(',');
+                baseParams.tags = debouncedSelectedTags.join(',');
             }
 
-            const response = await api.get('/api/posts', { params, signal });
-            setPosts(response.data.items);
-            setTotalPosts(response.data.total);
+            if (isAuthenticated && showSecretOnly) {
+                const fetchLimit = 100;
+                let skip = 0;
+                let total = 0;
+                const allItems: Post[] = [];
+
+                do {
+                    const response = await api.get('/api/posts', {
+                        params: {
+                            ...baseParams,
+                            skip,
+                            limit: fetchLimit,
+                        },
+                        signal,
+                    });
+
+                    const fetchedItems: Post[] = Array.isArray(response.data?.items) ? response.data.items : [];
+                    total = typeof response.data?.total === 'number' ? response.data.total : fetchedItems.length;
+                    allItems.push(...fetchedItems);
+                    skip += fetchLimit;
+                } while (allItems.length < total);
+
+                const secretPosts = allItems.filter(post => post.is_secret);
+                const pageStart = (currentPage - 1) * POSTS_PER_PAGE;
+                const pageEnd = pageStart + POSTS_PER_PAGE;
+
+                setPosts(secretPosts.slice(pageStart, pageEnd));
+                setTotalPosts(secretPosts.length);
+            } else {
+                const response = await api.get('/api/posts', {
+                    params: {
+                        ...baseParams,
+                        skip: (currentPage - 1) * POSTS_PER_PAGE,
+                        limit: POSTS_PER_PAGE,
+                    },
+                    signal,
+                });
+                setPosts(response.data.items);
+                setTotalPosts(response.data.total);
+            }
         } catch (err: unknown) {
             const isCanceled = !!err && typeof err === 'object' && 'name' in err && err.name === 'CanceledError';
             if (!isCanceled) {
@@ -327,7 +371,7 @@ const ListLayout: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [currentPage, debouncedSearch, debouncedSelectedTags]);
+    }, [currentPage, debouncedSearch, debouncedSelectedTags, isAuthenticated, showSecretOnly]);
 
     // 디바운스된 검색어/태그/페이지 변경 시 데이터 로드
     useEffect(() => {
@@ -339,6 +383,11 @@ const ListLayout: React.FC = () => {
     // 검색어 변경 시 1페이지로 리셋
     const handleSearchChange = (value: string) => {
         setSearchTerm(value);
+        setCurrentPage(1);
+    };
+
+    const handleSecretOnlyToggle = () => {
+        setShowSecretOnly(prev => !prev);
         setCurrentPage(1);
     };
 
@@ -489,6 +538,24 @@ const ListLayout: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                     </div>
+                    {isAuthenticated && (
+                        <div className="mb-4 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={handleSecretOnlyToggle}
+                                aria-pressed={showSecretOnly}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${showSecretOnly
+                                    ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                                    : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                    }`}
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 0h10.5A1.5 1.5 0 0118.75 12v6.75a1.5 1.5 0 01-1.5 1.5H6.75a1.5 1.5 0 01-1.5-1.5V12a1.5 1.5 0 011.5-1.5z" />
+                                </svg>
+                                비밀글만
+                            </button>
+                        </div>
+                    )}
 
                     {/* 태그 칩 필터 */}
                     {allTags.length > 0 && (
