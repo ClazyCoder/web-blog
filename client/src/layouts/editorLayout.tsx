@@ -262,6 +262,45 @@ const EditorLayout: React.FC = () => {
         });
     };
 
+    const syncPreviewToEditorPosition = () => {
+        const editorEl = editorTextareaRef.current;
+        const previewEl = previewContainerRef.current;
+        if (!editorEl || !previewEl) return;
+        syncScrollByRatio(editorEl, previewEl);
+    };
+
+    useEffect(() => {
+        if (!showPreview) return;
+
+        let frame1 = 0;
+        let frame2 = 0;
+        frame1 = requestAnimationFrame(() => {
+            // 레이아웃 계산이 끝난 다음 프리뷰 스크롤을 현재 편집 위치에 맞춘다.
+            frame2 = requestAnimationFrame(() => {
+                syncPreviewToEditorPosition();
+            });
+        });
+
+        return () => {
+            cancelAnimationFrame(frame1);
+            cancelAnimationFrame(frame2);
+        };
+    }, [showPreview]);
+
+    const handleToggleMobilePreviewMode = () => {
+        const nextPreviewMode = !isPreviewMode;
+        setIsPreviewMode(nextPreviewMode);
+        if (nextPreviewMode) {
+            requestAnimationFrame(() => {
+                syncPreviewToEditorPosition();
+            });
+        }
+    };
+
+    const handleTogglePreviewVisibility = () => {
+        setShowPreview((prev) => !prev);
+    };
+
     const isEditingPublished = !!postId && originalStatus === 'published';
 
     // 세션 만료(401) 시 편집 내용을 보존하면서 재로그인 안내
@@ -866,14 +905,14 @@ const EditorLayout: React.FC = () => {
                         <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
                             {/* 모바일 전용 편집/미리보기 토글 */}
                             <button
-                                onClick={() => setIsPreviewMode(!isPreviewMode)}
+                                onClick={handleToggleMobilePreviewMode}
                                 className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors lg:hidden whitespace-nowrap"
                             >
                                 {isPreviewMode ? '편집' : '미리보기'}
                             </button>
                             {/* 데스크탑 전용 미리보기 토글 */}
                             <button
-                                onClick={() => setShowPreview(!showPreview)}
+                                onClick={handleTogglePreviewVisibility}
                                 className="hidden lg:flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                                 title={showPreview ? '미리보기 숨기기' : '미리보기 보기'}
                             >
