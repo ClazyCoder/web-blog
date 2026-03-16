@@ -773,6 +773,10 @@ const EditorLayout: React.FC = () => {
                 newText = `| 헤더1 | 헤더2 |\n| --- | --- |\n| 값1 | 값2 |`;
                 cursorOffset = 34;
                 break;
+            case 'details':
+                newText = `<details>\n<summary>요약</summary>\n\n${selectedText}\n</details>`;
+                cursorOffset = `<details>\n<summary>요약</summary>\n\n`.length;
+                break;
             default:
                 return;
         }
@@ -1040,6 +1044,12 @@ const EditorLayout: React.FC = () => {
                         </button>
                         <button onClick={() => insertMarkdown('quote', '인용문')} className="toolbar-btn" title="인용문">
                             <span className="text-lg font-bold">"</span>
+                        </button>
+                        <button onClick={() => insertMarkdown('details', '내용')} className="toolbar-btn" title="접기/펼치기 블록">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7l4 5-4 5" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 9h4M14 12h3M14 15h4" />
+                            </svg>
                         </button>
                         <button onClick={() => insertMarkdown('code-block', 'code')} className="toolbar-btn" title="코드 블록">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
