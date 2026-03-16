@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import axios from 'axios';
 import api from '../utils/api';
 
 interface User {
@@ -17,6 +18,31 @@ export interface AuthContextType {
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AUTH_SESSION_HINT_KEY = 'auth.hasSessionHint';
+
+const hasSessionHint = (): boolean => {
+    try {
+        return localStorage.getItem(AUTH_SESSION_HINT_KEY) === '1';
+    } catch {
+        return false;
+    }
+};
+
+const setSessionHint = () => {
+    try {
+        localStorage.setItem(AUTH_SESSION_HINT_KEY, '1');
+    } catch {
+        // ignore storage failures
+    }
+};
+
+const clearSessionHint = () => {
+    try {
+        localStorage.removeItem(AUTH_SESSION_HINT_KEY);
+    } catch {
+        // ignore storage failures
+    }
+};
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
@@ -25,11 +51,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // 컴포넌트 마운트 시 쿠키의 토큰으로 사용자 정보 확인
     useEffect(() => {
         const initAuth = async () => {
+            // 로그인 힌트가 없으면 인증 확인 호출을 생략
+            if (!hasSessionHint()) {
+                setIsLoading(false);
+                return;
+            }
+
             try {
                 // HttpOnly 쿠키의 토큰으로 현재 사용자 정보 가져오기
                 const response = await api.get('/api/auth/me');
                 setUser(response.data);
             } catch (error) {
+                if (axios.isAxiosError(error) && error.response?.status === 401) {
+                    clearSessionHint();
+                }
                 // 토큰이 없거나 유효하지 않으면 무시
                 console.log('Not authenticated');
             } finally {
@@ -54,6 +89,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const userData: User = userResponse.data;
 
             setUser(userData);
+            setSessionHint();
 
             return true;
         } catch (error) {
@@ -70,6 +106,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.error('Logout error:', error);
         } finally {
             setUser(null);
+            clearSessionHint();
         }
     };
 
