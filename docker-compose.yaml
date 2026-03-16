@@ -73,6 +73,8 @@ services:
       SITE_NAME: ${SITE_NAME:-YSG Blog}
       # CORS (Docker 내부에서는 nginx 프록시로 same-origin)
       CORS_ORIGINS: "http://localhost,http://localhost:80"
+      # 타임존
+      TZ: ${TIMEZONE:-Asia/Seoul}
     volumes:
       - uploads:/app/uploads
 
@@ -86,6 +88,8 @@ services:
       args:
         VITE_SITE_NAME: ${SITE_NAME:-YSG Blog}
         VITE_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+    environment:
+      TZ: ${TIMEZONE:-Asia/Seoul}
     restart: unless-stopped
     depends_on:
       - server
