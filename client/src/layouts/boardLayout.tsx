@@ -21,7 +21,7 @@ interface PostItem {
 }
 
 const BoardLayout: React.FC = () => {
-    const { isLoading: authLoading } = useAuth();
+    const { isAuthenticated, isLoading: authLoading } = useAuth();
     const [posts, setPosts] = useState<PostItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -51,7 +51,7 @@ const BoardLayout: React.FC = () => {
 
         fetchPosts();
         return () => controller.abort();
-    }, [authLoading]);
+    }, [authLoading, isAuthenticated]);
 
     // 상대 시간 포맷
     const formatDate = (dateStr: string) => {

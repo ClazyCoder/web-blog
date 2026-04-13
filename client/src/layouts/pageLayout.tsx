@@ -205,7 +205,7 @@ const PageLayout: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const location = useLocation();
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, isLoading: authLoading } = useAuth();
     const [pageData, setPageData] = useState<PostData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -218,6 +218,7 @@ const PageLayout: React.FC = () => {
     const lastTocNavigatedHashRef = useRef<string>('');
 
     useEffect(() => {
+        if (authLoading) return;
         const controller = new AbortController();
 
         const fetchPost = async () => {
@@ -256,7 +257,7 @@ const PageLayout: React.FC = () => {
         fetchPost();
 
         return () => controller.abort();
-    }, [id]);
+    }, [authLoading, id, isAuthenticated]);
 
     // 마크다운에서 헤딩 파싱
     const headings = useMemo(() => {
