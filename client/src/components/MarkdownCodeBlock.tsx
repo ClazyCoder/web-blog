@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useId } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const extractCodeText = (node: React.ReactNode): string => {
     if (node == null) return '';
@@ -10,6 +10,12 @@ const extractCodeText = (node: React.ReactNode): string => {
     return '';
 };
 
+function normalizeClassName(className: unknown): string {
+    if (className == null) return '';
+    if (Array.isArray(className)) return className.map(String).join(' ');
+    return String(className);
+}
+
 function getFenceLanguage(children: React.ReactNode): string | null {
     let lang: string | null = null;
     const visit = (node: React.ReactNode): void => {
@@ -18,8 +24,8 @@ function getFenceLanguage(children: React.ReactNode): string | null {
             const elType = node.type;
             const isCode = elType === 'code' || (typeof elType === 'string' && elType === 'code');
             if (isCode) {
-                const className = (node.props as { className?: string }).className;
-                const m = className?.match(/language-([^\s]+)/);
+                const cn = normalizeClassName((node.props as { className?: unknown }).className);
+                const m = cn.match(/language-([^\s]+)/);
                 if (m) lang = m[1].toLowerCase();
             }
             if (!lang) {
@@ -48,15 +54,27 @@ function usePrefersDarkScheme(): boolean {
     return dark;
 }
 
-const MermaidDiagram: React.FC<{ code: string; renderId: string }> = ({ code, renderId }) => {
+/**
+ * mermaid.render(고정 id)는 Strict Mode·재렌더 시 DOM id 충돌이 나기 쉬우므로,
+ * 공식 run({ nodes }) 경로로 노드별 자동 id를 쓰도록 한다.
+ */
+const MermaidDiagram: React.FC<{ code: string }> = ({ code }) => {
     const hostRef = useRef<HTMLDivElement>(null);
+    const runGenerationRef = useRef(0);
     const [error, setError] = useState<string | null>(null);
     const prefersDark = usePrefersDarkScheme();
 
     useEffect(() => {
-        let cancelled = false;
         const el = hostRef.current;
         if (!el) return undefined;
+
+        runGenerationRef.current += 1;
+        const gen = runGenerationRef.current;
+        let cancelled = false;
+
+        el.classList.add('mermaid');
+        el.removeAttribute('data-processed');
+        el.textContent = code.trim();
 
         void (async () => {
             try {
@@ -64,48 +82,52 @@ const MermaidDiagram: React.FC<{ code: string; renderId: string }> = ({ code, re
                 mermaid.initialize({
                     startOnLoad: false,
                     theme: prefersDark ? 'dark' : 'default',
-                    securityLevel: 'strict',
+                    securityLevel: 'loose',
                 });
-                const { svg } = await mermaid.render(renderId, code.trim());
-                if (cancelled || !hostRef.current) return;
-                hostRef.current.innerHTML = svg;
+                if (cancelled || gen !== runGenerationRef.current) return;
+                await mermaid.run({ nodes: [el] });
+                if (cancelled || gen !== runGenerationRef.current) return;
                 setError(null);
             } catch (e) {
-                if (!cancelled) {
+                if (!cancelled && gen === runGenerationRef.current) {
                     const message = e instanceof Error ? e.message : String(e);
                     setError(message);
-                    if (hostRef.current) hostRef.current.innerHTML = '';
+                    el.innerHTML = '';
+                    el.removeAttribute('data-processed');
                 }
             }
         })();
 
         return () => {
             cancelled = true;
-            if (el) el.innerHTML = '';
+            el.removeAttribute('data-processed');
+            el.classList.remove('mermaid');
+            el.innerHTML = '';
         };
-    }, [code, prefersDark, renderId]);
-
-    if (error) {
-        return (
-            <div className="space-y-2">
-                <div
-                    className="rounded-md border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200"
-                    role="alert"
-                >
-                    Mermaid 렌더 오류: {error}
-                </div>
-                <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono whitespace-pre-wrap">
-                    {code}
-                </pre>
-            </div>
-        );
-    }
+    }, [code, prefersDark]);
 
     return (
-        <div
-            ref={hostRef}
-            className="flex justify-center overflow-x-auto rounded-lg border border-gray-500/30 bg-white p-4 dark:border-gray-600/40 dark:bg-gray-950 [&_svg]:max-w-full"
-        />
+        <div className="space-y-2">
+            {error ? (
+                <>
+                    <div
+                        className="rounded-md border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200"
+                        role="alert"
+                    >
+                        Mermaid 렌더 오류: {error}
+                    </div>
+                    <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono whitespace-pre-wrap">
+                        {code}
+                    </pre>
+                </>
+            ) : null}
+            {/* ref 호스트는 항상 마운트: 오류 후 소스 수정 시에도 effect가 다시 돈다 */}
+            <div
+                ref={hostRef}
+                className={`flex min-h-16 justify-center overflow-x-auto rounded-lg border border-gray-500/30 bg-white p-4 dark:border-gray-600/40 dark:bg-gray-950 [&_svg]:max-w-full ${error ? 'hidden' : ''}`}
+                aria-hidden={error ? true : undefined}
+            />
+        </div>
     );
 };
 
@@ -116,7 +138,6 @@ const MermaidDiagram: React.FC<{ code: string; renderId: string }> = ({ code, re
 const MarkdownCodeBlock: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [copied, setCopied] = useState(false);
     const copiedTimerRef = useRef<number | null>(null);
-    const reactId = useId().replace(/:/g, '');
 
     const language = useMemo(() => getFenceLanguage(children), [children]);
     const codeText = useMemo(() => extractCodeText(children), [children]);
@@ -169,7 +190,7 @@ const MarkdownCodeBlock: React.FC<{ children: React.ReactNode }> = ({ children }
                     )}
                 </button>
                 <div className="pr-14 pt-1">
-                    <MermaidDiagram code={codeText} renderId={`mmd-${reactId}`} />
+                    <MermaidDiagram code={codeText} />
                 </div>
             </div>
         );

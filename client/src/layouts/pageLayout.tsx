@@ -75,7 +75,7 @@ const PostMarkdownContent = React.memo<PostMarkdownContentProps>(({ content, hea
                         ...defaultSchema.attributes,
                         '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'id'],
                     },
-                }], rehypeKatex, rehypeHighlight]}
+                }], rehypeKatex, [rehypeHighlight, { plainText: ['mermaid'] }]]}
                 components={{
                     h1: ({ children }) => {
                         const text = extractTextFromChildren(children);

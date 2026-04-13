@@ -1148,7 +1148,7 @@ const EditorLayout: React.FC = () => {
                                                 ...defaultSchema.attributes,
                                                 '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'id'],
                                             },
-                                        }], rehypeKatex, rehypeHighlight]}
+                                        }], rehypeKatex, [rehypeHighlight, { plainText: ['mermaid'] }]]}
                                         components={{
                                             h1: ({ children }) => (
                                                 <h1 className="text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100">
