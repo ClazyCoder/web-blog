@@ -12,6 +12,7 @@ import 'highlight.js/styles/github-dark-dimmed.css';
 import { useAuth } from '../context/AuthContext';
 import { setNavigationGuard, clearNavigationGuard } from '../utils/navigationGuard';
 import { UnauthorizedAccess, EditorSidebar } from '../components';
+import MarkdownCodeBlock from '../components/MarkdownCodeBlock';
 import api from '../utils/api';
 
 interface EditorData {
@@ -1204,9 +1205,7 @@ const EditorLayout: React.FC = () => {
                                                 );
                                             },
                                             pre: ({ children }) => (
-                                                <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto my-4">
-                                                    {children}
-                                                </pre>
+                                                <MarkdownCodeBlock>{children}</MarkdownCodeBlock>
                                             ),
                                             blockquote: ({ children }) => (
                                                 <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-700 dark:text-gray-400 my-4">
