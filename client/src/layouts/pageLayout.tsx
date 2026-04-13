@@ -211,6 +211,7 @@ const PageLayout: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const viewCounted = useRef(false);
+    const hasRedirectedAfterAccessLoss = useRef(false);
 
     // TOC 상태
     const [activeHeadingId, setActiveHeadingId] = useState<string>('');
@@ -243,6 +244,11 @@ const PageLayout: React.FC = () => {
             } catch (err: any) {
                 if (controller.signal.aborted) return;
                 if (err.response?.status === 404) {
+                    if (!isAuthenticated && !hasRedirectedAfterAccessLoss.current) {
+                        hasRedirectedAfterAccessLoss.current = true;
+                        navigate('/board', { replace: true });
+                        return;
+                    }
                     setError('게시글을 찾을 수 없습니다.');
                 } else {
                     setError('게시글을 불러오는데 실패했습니다.');
