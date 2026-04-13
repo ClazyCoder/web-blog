@@ -63,7 +63,7 @@ const isTagCount = (item: unknown): item is TagCount => {
 
 const ListLayout: React.FC = () => {
     const navigate = useNavigate();
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, isLoading: authLoading } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
 
     // URL 파라미터에서 초기 상태 복원
@@ -194,8 +194,9 @@ const ListLayout: React.FC = () => {
         [sectionedTags]
     );
 
-    // URL 쿼리 파라미터 동기화
+    // URL 쿼리 파라미터 동기화 (초기 인증 확인 전에는 클라이언트 로그인 상태가 불확실하므로 동기화 생략)
     useEffect(() => {
+        if (authLoading) return;
         const params: Record<string, string> = {};
         if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
         if (debouncedSelectedTags.length > 0) params.tags = debouncedSelectedTags.join(',');
@@ -203,17 +204,19 @@ const ListLayout: React.FC = () => {
         if (currentPage > 1) params.page = String(currentPage);
 
         setSearchParams(params, { replace: true });
-    }, [debouncedSearch, debouncedSelectedTags, currentPage, isAuthenticated, setSearchParams, showSecretOnly]);
+    }, [authLoading, debouncedSearch, debouncedSelectedTags, currentPage, isAuthenticated, setSearchParams, showSecretOnly]);
 
     useEffect(() => {
+        if (authLoading) return;
         if (!isAuthenticated && showSecretOnly) {
             setShowSecretOnly(false);
             setCurrentPage(1);
         }
-    }, [isAuthenticated, showSecretOnly]);
+    }, [authLoading, isAuthenticated, showSecretOnly]);
 
     // 태그 목록 가져오기 (비밀글 토글 상태 반영)
     useEffect(() => {
+        if (authLoading) return;
         const controller = new AbortController();
         const params: Record<string, string> = {};
         if (isAuthenticated && showSecretOnly) {
@@ -238,7 +241,7 @@ const ListLayout: React.FC = () => {
                 }
             });
         return () => controller.abort();
-    }, [isAuthenticated, showSecretOnly]);
+    }, [authLoading, isAuthenticated, showSecretOnly]);
 
     useEffect(() => {
         try {
@@ -351,12 +354,13 @@ const ListLayout: React.FC = () => {
         }
     }, [currentPage, debouncedSearch, debouncedSelectedTags, isAuthenticated, showSecretOnly]);
 
-    // 디바운스된 검색어/태그/페이지 변경 시 데이터 로드
+    // 인증 초기화 완료 후 목록 요청 (이전에 요청하면 isAuthenticated·secret_only가 어긋날 수 있음)
     useEffect(() => {
+        if (authLoading) return;
         const controller = new AbortController();
         fetchPosts(controller.signal);
         return () => controller.abort();
-    }, [fetchPosts]);
+    }, [authLoading, fetchPosts]);
 
     // 검색어 변경 시 1페이지로 리셋
     const handleSearchChange = (value: string) => {

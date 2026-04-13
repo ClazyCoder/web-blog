@@ -12,6 +12,7 @@ import 'highlight.js/styles/github-dark-dimmed.css';
 import { useAuth } from '../context/AuthContext';
 import { setNavigationGuard, clearNavigationGuard } from '../utils/navigationGuard';
 import { UnauthorizedAccess, EditorSidebar } from '../components';
+import MarkdownCodeBlock from '../components/MarkdownCodeBlock';
 import api from '../utils/api';
 
 interface EditorData {
@@ -773,6 +774,10 @@ const EditorLayout: React.FC = () => {
                 newText = `| 헤더1 | 헤더2 |\n| --- | --- |\n| 값1 | 값2 |`;
                 cursorOffset = 34;
                 break;
+            case 'details':
+                newText = `<details>\n<summary>요약</summary>\n\n${selectedText}\n</details>`;
+                cursorOffset = `<details>\n<summary>요약</summary>\n\n`.length;
+                break;
             default:
                 return;
         }
@@ -1041,6 +1046,12 @@ const EditorLayout: React.FC = () => {
                         <button onClick={() => insertMarkdown('quote', '인용문')} className="toolbar-btn" title="인용문">
                             <span className="text-lg font-bold">"</span>
                         </button>
+                        <button onClick={() => insertMarkdown('details', '내용')} className="toolbar-btn" title="접기/펼치기 블록">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7l4 5-4 5" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 9h4M14 12h3M14 15h4" />
+                            </svg>
+                        </button>
                         <button onClick={() => insertMarkdown('code-block', 'code')} className="toolbar-btn" title="코드 블록">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
@@ -1135,9 +1146,11 @@ const EditorLayout: React.FC = () => {
                                             tagNames: [...(defaultSchema.tagNames || []), 'br', 'hr', 'sub', 'sup', 'mark', 'abbr', 'details', 'summary'],
                                             attributes: {
                                                 ...defaultSchema.attributes,
+                                                /* 기본 스키마는 code.className을 /^language-.$/만 허용해 language-mermaid 등이 삭제됨 → Mermaid 분기 실패 */
+                                                code: [['className', /^language-/, /^hljs$/]],
                                                 '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'id'],
                                             },
-                                        }], rehypeKatex, rehypeHighlight]}
+                                        }], rehypeKatex, [rehypeHighlight, { plainText: ['mermaid'] }]]}
                                         components={{
                                             h1: ({ children }) => (
                                                 <h1 className="text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100">
@@ -1194,9 +1207,7 @@ const EditorLayout: React.FC = () => {
                                                 );
                                             },
                                             pre: ({ children }) => (
-                                                <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto my-4">
-                                                    {children}
-                                                </pre>
+                                                <MarkdownCodeBlock>{children}</MarkdownCodeBlock>
                                             ),
                                             blockquote: ({ children }) => (
                                                 <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-700 dark:text-gray-400 my-4">

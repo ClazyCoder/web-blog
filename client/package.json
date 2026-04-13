@@ -13,6 +13,7 @@
     "@tailwindcss/vite": "^4.1.18",
     "axios": "^1.13.4",
     "katex": "^0.16.28",
+    "mermaid": "^11.14.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",

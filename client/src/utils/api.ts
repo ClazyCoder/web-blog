@@ -21,8 +21,9 @@ const api = axios.create({
     withCredentials: true, // HttpOnly 쿠키 전송을 위해 필수
 });
 
-// 401 리다이렉트를 건너뛸 경로 (인증 관련 요청)
-const SKIP_AUTH_REDIRECT = ['/api/auth/me', '/api/auth/login', '/api/auth/logout', '/api/auth/refresh'];
+// 401 처리(갱신/리다이렉트)를 건너뛸 경로
+// - /me 는 제외하여 초기 인증 확인에서도 refresh 재시도가 가능하도록 함
+const SKIP_AUTH_REDIRECT = ['/api/auth/login', '/api/auth/logout', '/api/auth/refresh'];
 
 // 토큰 갱신 중복 방지: 동시에 하나의 refresh 요청만 실행
 let isRefreshing = false;
