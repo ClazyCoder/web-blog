@@ -1146,6 +1146,8 @@ const EditorLayout: React.FC = () => {
                                             tagNames: [...(defaultSchema.tagNames || []), 'br', 'hr', 'sub', 'sup', 'mark', 'abbr', 'details', 'summary'],
                                             attributes: {
                                                 ...defaultSchema.attributes,
+                                                /* 기본 스키마는 code.className을 /^language-.$/만 허용해 language-mermaid 등이 삭제됨 → Mermaid 분기 실패 */
+                                                code: [['className', /^language-/, /^hljs$/]],
                                                 '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'id'],
                                             },
                                         }], rehypeKatex, [rehypeHighlight, { plainText: ['mermaid'] }]]}

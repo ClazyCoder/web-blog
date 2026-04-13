@@ -21,16 +21,13 @@ function getFenceLanguage(children: React.ReactNode): string | null {
     const visit = (node: React.ReactNode): void => {
         if (lang) return;
         if (React.isValidElement(node)) {
-            const elType = node.type;
-            const isCode = elType === 'code' || (typeof elType === 'string' && elType === 'code');
-            if (isCode) {
-                const cn = normalizeClassName((node.props as { className?: unknown }).className);
-                const m = cn.match(/language-([^\s]+)/);
-                if (m) lang = m[1].toLowerCase();
+            const cn = normalizeClassName((node.props as { className?: unknown }).className);
+            const m = cn.match(/language-([^\s]+)/);
+            if (m) {
+                lang = m[1].toLowerCase();
+                return;
             }
-            if (!lang) {
-                visit((node.props as { children?: React.ReactNode }).children);
-            }
+            visit((node.props as { children?: React.ReactNode }).children);
         } else if (Array.isArray(node)) {
             node.forEach(visit);
         }
