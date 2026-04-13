@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ContentCard } from "../components";
+import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 
 interface PostItem {
@@ -20,11 +21,14 @@ interface PostItem {
 }
 
 const BoardLayout: React.FC = () => {
+    const { isLoading: authLoading } = useAuth();
     const [posts, setPosts] = useState<PostItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        if (authLoading) return;
+
         const controller = new AbortController();
 
         const fetchPosts = async () => {
@@ -47,7 +51,7 @@ const BoardLayout: React.FC = () => {
 
         fetchPosts();
         return () => controller.abort();
-    }, []);
+    }, [authLoading]);
 
     // 상대 시간 포맷
     const formatDate = (dateStr: string) => {
