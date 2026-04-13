@@ -1,234 +1,101 @@
 # Web Blog Server
 
-FastAPI 기반 블로그 백엔드 서버
+FastAPI 기반 백엔드 API 서버입니다.  
+게시글/이미지/인증 API와 Redis 기반 캐시·토큰 블랙리스트·rate limit를 제공합니다.
 
-## 기능
+## 핵심 기능
 
-- JWT 기반 인증 (로그인/회원가입)
-- 블로그 포스트 CRUD (생성/조회/수정/삭제, 임시저장/발행)
-- 이미지 업로드 및 게시글 연결 관리
-- 이미지 자동 리사이징/최적화 (Pillow 기반, 최대 1920px, 포맷별 압축)
-- Orphan 이미지 자동 정리 (백그라운드 스케줄러)
-- 관리용 이미지 현황 조회 및 강제 정리 API (TTL 무시)
-- Rate limiting (slowapi 기반, 엔드포인트별 요청 속도 제한)
-- 프로덕션 환경에서 API 문서 자동 비활성화
-- Alembic 기반 DB 마이그레이션
-- CORS 설정 / 정적 파일 서빙
-- 헬스 체크 엔드포인트
+- JWT 쿠키 인증 (`/api/auth/login`, `/refresh`, `/me`, `/logout`)
+- 게시글 CRUD + 슬러그 조회 + 조회수 증가 + 비밀글 처리
+- 이미지 업로드/최적화(리사이즈, 포맷별 압축) 및 게시글 자동 연결
+- orphan 이미지 자동 정리 스케줄러 + 관리자 수동 정리 API
+- Redis 캐시(목록/상세/태그) 및 캐시 무효화
+- `ENV=production`에서 문서 엔드포인트 자동 비활성화
 
-## 프로젝트 구조
-
-```
-server/
-├── main.py                  # FastAPI 앱 진입점 (lifespan, CORS, 라우터 등록)
-├── auth.py                  # JWT 인증 유틸리티
-├── routers/                 # API 라우터
-│   ├── auth.py              # 인증 관련 API
-│   ├── post.py              # 게시글 CRUD API
-│   └── image.py             # 이미지 업로드/삭제/관리 API
-├── models/                  # SQLAlchemy 모델
-│   ├── base.py              # Base 모델
-│   ├── post.py              # Post 모델
-│   └── image.py             # Image 모델
-├── schemas/                 # Pydantic 스키마
-│   ├── auth.py              # 인증 스키마
-│   └── post.py              # 게시글/이미지 응답 스키마
-├── services/                # 백그라운드 서비스
-│   └── image_cleanup.py     # Orphan 이미지 자동 정리
-├── db/
-│   └── session.py           # 비동기 DB 세션 관리
-├── blog/                    # Alembic 마이그레이션
-│   └── versions/            # 마이그레이션 파일
-├── uploads/                 # 업로드된 파일 (자동 생성)
-├── pyproject.toml           # 패키지 의존성
-├── alembic.ini              # Alembic 설정
-├── entrypoint.sh            # Docker 엔트리포인트
-├── Dockerfile               # 서버 Docker 이미지
-└── .env                     # 환경 변수 (생성 필요)
-```
-
-## 설치 및 실행
-
-### 1. 의존성 설치
+## 빠른 시작
 
 ```bash
-# uv 사용 (권장)
-uv sync
-
-# 또는 pip 사용
-pip install -e .
-```
-
-### 2. 환경 변수 설정
-
-```bash
-# .env.example을 .env로 복사
+cd server
 cp .env.example .env
-
-# .env 파일 편집하여 SECRET_KEY 등 변경
-# SECRET_KEY 생성 예시:
-# python -c "import secrets; print(secrets.token_hex(32))"
-```
-
-### 3. DB 마이그레이션
-
-```bash
+uv sync
 alembic upgrade head
-```
-
-### 4. 서버 실행
-
-```bash
-# 메인 스크립트로 실행 (자동 리로드)
 python main.py
-
-# 또는 uvicorn 직접 실행
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-서버가 `http://localhost:8000`에서 실행됩니다.
+- API: `http://localhost:8000`
+- Docs(개발 모드): `http://localhost:8000/docs`
 
-## API 문서
+> [!WARNING]
+> 인증 쿠키가 `secure=True`로 설정되어 있어 HTTPS 환경을 전제로 합니다. 로컬 HTTP 환경에서는 브라우저 정책에 따라 쿠키 전달 동작을 반드시 점검하세요.
 
-개발 환경(`ENV=development` 또는 미설정)에서만 자동 생성된 API 문서를 확인할 수 있습니다:
+## API 개요
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+### Auth
 
-> 프로덕션 환경(`ENV=production`)에서는 `/docs`, `/redoc`, `/openapi.json`이 자동으로 비활성화됩니다.
+| Method | Path | 설명 |
+|---|---|---|
+| `POST` | `/api/auth/login` | 로그인 및 쿠키 발급 |
+| `POST` | `/api/auth/refresh` | 리프레시 토큰으로 재발급(회전) |
+| `GET` | `/api/auth/me` | 현재 사용자 조회 |
+| `POST` | `/api/auth/logout` | 로그아웃 + 블랙리스트 등록 |
 
-## API 엔드포인트
+### Posts
 
-### 인증 (Auth)
+| Method | Path | 설명 |
+|---|---|---|
+| `GET` | `/api/posts` | 목록(검색/태그/상태/비밀글 필터) |
+| `GET` | `/api/posts/tags` | 태그 집계/목록 |
+| `GET` | `/api/posts/{post_id}` | 상세 조회 |
+| `GET` | `/api/posts/slug/{slug}` | 슬러그 조회 |
+| `POST` | `/api/posts` | 생성(인증 필요) |
+| `PUT` | `/api/posts/{post_id}` | 수정(인증 필요) |
+| `DELETE` | `/api/posts/{post_id}` | 삭제(인증 필요) |
+| `POST` | `/api/posts/{post_id}/view` | 조회수 증가 |
 
-| Method | Endpoint | 인증 | 설명 |
-|--------|----------|------|------|
-| POST | `/api/auth/register` | - | 회원가입 |
-| POST | `/api/auth/login` | - | 로그인 (JWT 발급) |
+### Images
 
-### 게시글 (Posts)
-
-| Method | Endpoint | 인증 | 설명 |
-|--------|----------|------|------|
-| GET | `/api/posts` | - | 게시글 목록 (페이지네이션, 태그/카테고리/검색 필터) |
-| GET | `/api/posts/{post_id}` | - | 게시글 상세 (연결된 이미지 목록 포함) |
-| GET | `/api/posts/slug/{slug}` | - | 슬러그로 게시글 조회 |
-| GET | `/api/posts/tags` | - | 전체 태그 목록 |
-| POST | `/api/posts` | 필수 | 게시글 생성 (draft/published) |
-| PUT | `/api/posts/{post_id}` | 필수 | 게시글 수정 |
-| DELETE | `/api/posts/{post_id}` | 필수 | 게시글 삭제 (soft/permanent) |
-| POST | `/api/posts/{post_id}/view` | - | 조회수 증가 |
-
-### 이미지 (Image)
-
-| Method | Endpoint | 인증 | 설명 |
-|--------|----------|------|------|
-| POST | `/api/upload/image` | 필수 | 이미지 업로드 |
-| GET | `/api/upload/temp/{filename}` | - | 임시 이미지 정보 조회 |
-| DELETE | `/api/upload/image/{filename}` | 필수 | 이미지 삭제 (soft-delete) |
-| GET | `/api/upload/admin/orphans` | 필수 | Orphan 이미지 현황 조회 |
-| POST | `/api/upload/admin/cleanup` | 필수 | Orphan 이미지 강제 정리 실행 (TTL 무시) |
-
-### 시스템
-
-| Method | Endpoint | 설명 |
-|--------|----------|------|
-| GET | `/` | API 정보 (프로덕션에서는 최소 정보만 반환) |
-| GET | `/health` | 헬스 체크 |
-
-## 이미지 관리
-
-### 이미지 리사이징/최적화
-
-이미지 업로드 시 자동으로 최적화가 적용됩니다:
-
-| 항목 | 내용 |
-|------|------|
-| 최대 크기 | 1920px (긴 변 기준, 비율 유지 리사이징) |
-| JPEG 압축 | 품질 85, optimize 활성화 |
-| WebP 압축 | 품질 80, method 6 (최고 압축) |
-| PNG | optimize 활성화 |
-| GIF | 애니메이션 GIF는 원본 유지, 단일 프레임은 최적화 |
-| EXIF | 회전 정보 자동 보정 (exif_transpose) |
-
-- 설정값은 `routers/image.py` 상단 상수에서 변경 가능
-
-### 이미지-게시글 연결
-
-이미지는 DB의 `images` 테이블에서 `post_id` 외래키로 게시글과 연결됩니다. 게시글 생성/수정 시 마크다운 본문을 분석하여 자동으로 연결을 관리합니다:
-
-- 본문에 포함된 이미지 → `post_id` 설정, `is_temporary=False`
-- 본문에서 제거된 이미지 → `post_id=None`, `is_temporary=True`
-- 게시글 삭제(소프트/영구) 시 → 연결된 이미지를 `post_id=None`, `is_temporary=True`로 전환 (orphan화)
-
-### Orphan 이미지 자동 정리
-
-서버 시작 시 백그라운드 스케줄러가 자동으로 실행되어 주기적으로 정리합니다:
-
-| 정리 대상 | 조건 | 동작 |
-|-----------|------|------|
-| 임시 이미지 (orphan) | `is_temporary=True`, `post_id=NULL`, 생성 후 24시간 경과 | 파일 삭제 + soft-delete |
-| soft-delete된 이미지 | `deleted_at` 설정 후 7일 경과 | 파일 삭제 + DB 레코드 영구 삭제 |
-
-- 정리 주기: 1시간 간격 (백그라운드 스케줄러)
-- 관리자 수동 실행: `POST /api/upload/admin/cleanup` — TTL 무시 강제 정리 (모든 orphan 이미지 즉시 정리)
-- 설정값은 `services/image_cleanup.py`에서 변경 가능
-
-## Rate Limiting
-
-`slowapi` 기반 IP별 요청 속도 제한이 적용됩니다:
-
-| 엔드포인트 | 제한 | 설명 |
-|------------|------|------|
-| `POST /api/auth/login` | 5회/분 | 브루트포스 방지 |
-| `POST /api/upload/image` | 30회/분 | 이미지 업로드 남용 방지 |
-| `POST /api/posts` | 20회/분 | 게시글 생성 |
-| `PUT /api/posts/{id}` | 20회/분 | 게시글 수정 |
-| `DELETE /api/posts/{id}` | 20회/분 | 게시글 삭제 |
-| `POST /api/posts/{id}/view` | 30회/분 | 조회수 증가 |
-| 기타 엔드포인트 | 60회/분 | 기본 제한 |
-
-- 제한 초과 시 `429 Too Many Requests` 응답 반환
-- 응답 헤더에 `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` 포함
+| Method | Path | 설명 |
+|---|---|---|
+| `POST` | `/api/upload/image` | 이미지 업로드(인증 필요) |
+| `GET` | `/api/upload/temp/{filename}` | 임시 이미지 정보 |
+| `DELETE` | `/api/upload/image/{filename}` | 이미지 삭제(인증 필요) |
+| `GET` | `/api/upload/admin/orphans` | orphan 통계(인증 필요) |
+| `GET` | `/api/upload/admin/orphans/list` | orphan 목록(인증 필요) |
+| `POST` | `/api/upload/admin/cleanup` | 강제 정리(인증 필요) |
 
 ## 환경 변수
 
-| 변수 | 설명 | 기본값 |
-|------|------|--------|
-| `ENV` | 환경 (`development` / `production`) | `development` |
-| `SECRET_KEY` | JWT 시크릿 키 | - (필수 설정) |
-| `ALGORITHM` | JWT 알고리즘 | `HS256` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | 토큰 만료 시간 (분) | `30` |
-| `DATABASE_URL` | DB 연결 URL | `sqlite+aiosqlite:///./blog.db` |
-| `BASE_URL` | 서버 기본 URL (이미지 URL 생성용) | `http://localhost:8000` |
-| `CORS_ORIGINS` | CORS 허용 origin (쉼표 구분) | `http://localhost:5173,http://localhost:3000` |
-| `ADMIN_USERNAME` | 관리자 계정 이름 | - |
-| `ADMIN_PASSWORD` | 관리자 계정 비밀번호 | - |
-| `ADMIN_EMAIL` | 관리자 계정 이메일 | - |
+```env
+ENV=development
+SECRET_KEY=change-me
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=change-me
+ADMIN_EMAIL=admin@example.com
 
-## 개발
+# 개별 DB 설정 또는 DATABASE_URL 중 하나 사용
+DB_HOST=
+DB_PORT=5432
+DB_USER=
+DB_PASSWORD=
+DB_NAME=
+DATABASE_URL=sqlite+aiosqlite:///./blog.db
 
-### 테스트 실행
+# optional
+REDIS_URL=redis://localhost:6379/0
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+BASE_URL=http://localhost:8000
+SITE_URL=
+SITE_NAME=YSG Blog
+```
+
+> [!NOTE]
+> DB 접속은 `DB_HOST/DB_USER/DB_PASSWORD/DB_NAME`가 모두 있으면 이를 우선 사용하고, 없으면 `DATABASE_URL`로 동작합니다.
+
+## 개발 명령어
 
 ```bash
-# 개발 의존성 설치
 uv sync --extra dev
-
-# 테스트 실행
 pytest
 ```
 
-### 코드 포맷팅
-
-```bash
-# ruff 사용
-ruff check .
-ruff format .
-```
-
-## TODO
-
-- [x] 이미지 리사이징/최적화
-- [ ] CDN 연동
-- [x] Rate limiting
-- [ ] 테스트 코드 작성
+DB 스키마/운영 상세는 [`README_DB.md`](./README_DB.md)를 참고하세요.
