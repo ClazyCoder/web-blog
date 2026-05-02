@@ -1,5 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
+/** `<pre>`(MarkdownCodeBlock) 내부의 fenced `<code>`는 true — className 유무로 inline 판단하지 않도록 함 */
+export const InCodeFenceContext = React.createContext(false);
+
+const FenceLanguageLabel: React.FC<{ language: string }> = ({ language }) => (
+    <span
+        className="pointer-events-none absolute left-3 top-2 z-10 select-none rounded bg-gray-800/60 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide text-gray-300 backdrop-blur"
+        aria-hidden="true"
+    >
+        {language}
+    </span>
+);
+
 const extractCodeText = (node: React.ReactNode): string => {
     if (node == null) return '';
     if (typeof node === 'string' || typeof node === 'number') return String(node);
@@ -186,9 +198,12 @@ const MarkdownCodeBlock: React.FC<{ children: React.ReactNode }> = ({ children }
                         </svg>
                     )}
                 </button>
-                <div className="pr-14 pt-1">
-                    <MermaidDiagram code={codeText} />
-                </div>
+                {language ? <FenceLanguageLabel language={language} /> : null}
+                <InCodeFenceContext.Provider value={true}>
+                    <div className="pr-14 pt-7">
+                        <MermaidDiagram code={codeText} />
+                    </div>
+                </InCodeFenceContext.Provider>
             </div>
         );
     }
@@ -212,9 +227,12 @@ const MarkdownCodeBlock: React.FC<{ children: React.ReactNode }> = ({ children }
                     </svg>
                 )}
             </button>
-            <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 pr-16 rounded-lg overflow-x-auto">
-                {children}
-            </pre>
+            {language ? <FenceLanguageLabel language={language} /> : null}
+            <InCodeFenceContext.Provider value={true}>
+                <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 rounded-lg overflow-x-auto pt-7 px-4 pr-16 pb-4">
+                    {children}
+                </pre>
+            </InCodeFenceContext.Provider>
         </div>
     );
 };

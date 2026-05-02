@@ -14,7 +14,7 @@ import api from '../utils/api';
 import { parseMarkdownHeadings, extractTextFromChildren, slugifyHeadingText } from '../utils/tocParser';
 import type { TocItem } from '../utils/tocParser';
 import TableOfContents from '../components/TableOfContents';
-import MarkdownCodeBlock from '../components/MarkdownCodeBlock';
+import MarkdownCodeBlock, { InCodeFenceContext } from '../components/MarkdownCodeBlock';
 
 interface PostData {
     id: number;
@@ -135,13 +135,13 @@ const PostMarkdownContent = React.memo<PostMarkdownContentProps>(({ content, hea
                         </strong>
                     ),
                     code: ({ className, children }) => {
-                        const isInline = !className;
-                        return isInline ? (
+                        const inFence = React.useContext(InCodeFenceContext);
+                        return inFence ? (
+                            <code className={className}>{children}</code>
+                        ) : (
                             <code className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">
                                 {children}
                             </code>
-                        ) : (
-                            <code className={className}>{children}</code>
                         );
                     },
                     pre: ({ children }) => (

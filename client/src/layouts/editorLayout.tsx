@@ -12,7 +12,7 @@ import 'highlight.js/styles/github-dark-dimmed.css';
 import { useAuth } from '../context/AuthContext';
 import { setNavigationGuard, clearNavigationGuard } from '../utils/navigationGuard';
 import { UnauthorizedAccess, EditorSidebar } from '../components';
-import MarkdownCodeBlock from '../components/MarkdownCodeBlock';
+import MarkdownCodeBlock, { InCodeFenceContext } from '../components/MarkdownCodeBlock';
 import api from '../utils/api';
 
 interface EditorData {
@@ -32,6 +32,142 @@ interface UploadedImage {
     filename: string;
     uploadedAt: number;
 }
+
+interface EditorMarkdownPreviewProps {
+    markdown: string;
+}
+
+const EditorMarkdownPreview = React.memo<EditorMarkdownPreviewProps>(({ markdown }) => (
+    <ReactMarkdown
+        remarkPlugins={[remarkMath, remarkGfm]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, {
+            ...defaultSchema,
+            tagNames: [...(defaultSchema.tagNames || []), 'br', 'hr', 'sub', 'sup', 'mark', 'abbr', 'details', 'summary'],
+            attributes: {
+                ...defaultSchema.attributes,
+                /* 기본 스키마는 code.className을 /^language-.$/만 허용해 language-mermaid 등이 삭제됨 → Mermaid 분기 실패 */
+                code: [['className', /^language-/, /^hljs$/]],
+                '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'id'],
+            },
+        }], rehypeKatex, [rehypeHighlight, { plainText: ['mermaid'] }]]}
+        components={{
+            h1: ({ children }) => (
+                <h1 className="text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100">
+                    {children}
+                </h1>
+            ),
+            h2: ({ children }) => (
+                <h2 className="text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100">
+                    {children}
+                </h2>
+            ),
+            h3: ({ children }) => (
+                <h3 className="text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100">
+                    {children}
+                </h3>
+            ),
+            p: ({ children }) => (
+                <p className="mb-4 leading-7 text-gray-800 dark:text-gray-300">
+                    {children}
+                </p>
+            ),
+            a: ({ href, children }) => {
+                // XSS 방지: javascript:, data:, vbscript: 등 위험한 스키마 차단
+                const isSafeUrl = href &&
+                    !href.toLowerCase().startsWith('javascript:') &&
+                    !href.toLowerCase().startsWith('data:') &&
+                    !href.toLowerCase().startsWith('vbscript:');
+
+                return (
+                    <a
+                        href={isSafeUrl ? href : '#'}
+                        className="text-emerald-600 dark:text-emerald-400 hover:underline no-underline"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={!isSafeUrl ? (e) => e.preventDefault() : undefined}
+                    >
+                        {children}
+                    </a>
+                );
+            },
+            strong: ({ children }) => (
+                <strong className="font-semibold text-gray-900 dark:text-gray-100">
+                    {children}
+                </strong>
+            ),
+            code: ({ className, children }) => {
+                const inFence = React.useContext(InCodeFenceContext);
+                return inFence ? (
+                    <code className={className}>{children}</code>
+                ) : (
+                    <code className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">
+                        {children}
+                    </code>
+                );
+            },
+            pre: ({ children }) => (
+                <MarkdownCodeBlock>{children}</MarkdownCodeBlock>
+            ),
+            blockquote: ({ children }) => (
+                <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-700 dark:text-gray-400 my-4">
+                    {children}
+                </blockquote>
+            ),
+            ul: ({ children }) => (
+                <ul className="list-disc pl-6 mb-4 text-gray-800 dark:text-gray-300">
+                    {children}
+                </ul>
+            ),
+            ol: ({ children }) => (
+                <ol className="list-decimal pl-6 mb-4 text-gray-800 dark:text-gray-300">
+                    {children}
+                </ol>
+            ),
+            li: ({ children }) => (
+                <li className="mb-2">{children}</li>
+            ),
+            table: ({ children }) => (
+                <div className="overflow-x-auto my-4">
+                    <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
+                        {children}
+                    </table>
+                </div>
+            ),
+            th: ({ children }) => (
+                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold text-left">
+                    {children}
+                </th>
+            ),
+            td: ({ children }) => (
+                <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-800 dark:text-gray-300">
+                    {children}
+                </td>
+            ),
+            hr: () => (
+                <hr className="my-8 border-gray-300 dark:border-gray-700" />
+            ),
+            img: ({ src, alt }) => {
+                // XSS 방지: 안전한 이미지 URL만 허용
+                const isSafeUrl = src &&
+                    (src.startsWith('http://') ||
+                        src.startsWith('https://') ||
+                        src.startsWith('/'));
+
+                return isSafeUrl ? (
+                    <img
+                        src={src}
+                        alt={alt || '이미지'}
+                        className="rounded-lg shadow-lg my-4 max-w-full h-auto"
+                    />
+                ) : null;
+            },
+        }}
+    >
+        {markdown}
+    </ReactMarkdown>
+));
+
+EditorMarkdownPreview.displayName = 'EditorMarkdownPreview';
 
 const EditorLayout: React.FC = () => {
     const { id: paramId } = useParams<{ id: string }>();
@@ -1139,133 +1275,7 @@ const EditorLayout: React.FC = () => {
                             <span className="p-2 text-sm italic font-bold mb-4 mt-8 text-gray-700 dark:text-gray-300">미리보기</span>
                             <div className="p-6 max-w-4xl mx-auto">
                                 <div className="markdown-content">
-                                    <ReactMarkdown
-                                        remarkPlugins={[remarkMath, remarkGfm]}
-                                        rehypePlugins={[rehypeRaw, [rehypeSanitize, {
-                                            ...defaultSchema,
-                                            tagNames: [...(defaultSchema.tagNames || []), 'br', 'hr', 'sub', 'sup', 'mark', 'abbr', 'details', 'summary'],
-                                            attributes: {
-                                                ...defaultSchema.attributes,
-                                                /* 기본 스키마는 code.className을 /^language-.$/만 허용해 language-mermaid 등이 삭제됨 → Mermaid 분기 실패 */
-                                                code: [['className', /^language-/, /^hljs$/]],
-                                                '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'id'],
-                                            },
-                                        }], rehypeKatex, [rehypeHighlight, { plainText: ['mermaid'] }]]}
-                                        components={{
-                                            h1: ({ children }) => (
-                                                <h1 className="text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100">
-                                                    {children}
-                                                </h1>
-                                            ),
-                                            h2: ({ children }) => (
-                                                <h2 className="text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100">
-                                                    {children}
-                                                </h2>
-                                            ),
-                                            h3: ({ children }) => (
-                                                <h3 className="text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100">
-                                                    {children}
-                                                </h3>
-                                            ),
-                                            p: ({ children }) => (
-                                                <p className="mb-4 leading-7 text-gray-800 dark:text-gray-300">
-                                                    {children}
-                                                </p>
-                                            ),
-                                            a: ({ href, children }) => {
-                                                // XSS 방지: javascript:, data:, vbscript: 등 위험한 스키마 차단
-                                                const isSafeUrl = href &&
-                                                    !href.toLowerCase().startsWith('javascript:') &&
-                                                    !href.toLowerCase().startsWith('data:') &&
-                                                    !href.toLowerCase().startsWith('vbscript:');
-
-                                                return (
-                                                    <a
-                                                        href={isSafeUrl ? href : '#'}
-                                                        className="text-emerald-600 dark:text-emerald-400 hover:underline no-underline"
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        onClick={!isSafeUrl ? (e) => e.preventDefault() : undefined}
-                                                    >
-                                                        {children}
-                                                    </a>
-                                                );
-                                            },
-                                            strong: ({ children }) => (
-                                                <strong className="font-semibold text-gray-900 dark:text-gray-100">
-                                                    {children}
-                                                </strong>
-                                            ),
-                                            code: ({ className, children }) => {
-                                                const isInline = !className;
-                                                return isInline ? (
-                                                    <code className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">
-                                                        {children}
-                                                    </code>
-                                                ) : (
-                                                    <code className={className}>{children}</code>
-                                                );
-                                            },
-                                            pre: ({ children }) => (
-                                                <MarkdownCodeBlock>{children}</MarkdownCodeBlock>
-                                            ),
-                                            blockquote: ({ children }) => (
-                                                <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-700 dark:text-gray-400 my-4">
-                                                    {children}
-                                                </blockquote>
-                                            ),
-                                            ul: ({ children }) => (
-                                                <ul className="list-disc pl-6 mb-4 text-gray-800 dark:text-gray-300">
-                                                    {children}
-                                                </ul>
-                                            ),
-                                            ol: ({ children }) => (
-                                                <ol className="list-decimal pl-6 mb-4 text-gray-800 dark:text-gray-300">
-                                                    {children}
-                                                </ol>
-                                            ),
-                                            li: ({ children }) => (
-                                                <li className="mb-2">{children}</li>
-                                            ),
-                                            table: ({ children }) => (
-                                                <div className="overflow-x-auto my-4">
-                                                    <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
-                                                        {children}
-                                                    </table>
-                                                </div>
-                                            ),
-                                            th: ({ children }) => (
-                                                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold text-left">
-                                                    {children}
-                                                </th>
-                                            ),
-                                            td: ({ children }) => (
-                                                <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-800 dark:text-gray-300">
-                                                    {children}
-                                                </td>
-                                            ),
-                                            hr: () => (
-                                                <hr className="my-8 border-gray-300 dark:border-gray-700" />
-                                            ),
-                                            img: ({ src, alt }) => {
-                                                // XSS 방지: 안전한 이미지 URL만 허용
-                                                const isSafeUrl = src &&
-                                                    (src.startsWith('http://') ||
-                                                        src.startsWith('https://') ||
-                                                        src.startsWith('/'));
-
-                                                return isSafeUrl ? (
-                                                    <img
-                                                        src={src}
-                                                        alt={alt || '이미지'}
-                                                        className="rounded-lg shadow-lg my-4 max-w-full h-auto"
-                                                    />
-                                                ) : null;
-                                            },
-                                        }}
-                                    >
-                                        {editorData.markdown || '*여기에 미리보기가 표시됩니다*'}
-                                    </ReactMarkdown>
+                                    <EditorMarkdownPreview markdown={editorData.markdown || '*여기에 미리보기가 표시됩니다*'} />
                                 </div>
                             </div>
                         </div>
