@@ -9,7 +9,7 @@ from pathlib import Path
 import uuid
 from datetime import datetime
 import re
-import io
+from io import BytesIO
 import logging
 from PIL import Image as PILImage, ImageOps
 import os
@@ -165,13 +165,12 @@ def optimize_image(file_path: Path) -> tuple[int, int | None, int | None]:
 
     except Exception as e:
         logger.warning(f"Image optimization failed for {file_path.name}: {e}")
-        # 최적화 실패 시 원본 유지, 크기 정보만 시도
+        # 최적화 실패 = 파일이 손상됨 → 삭제하고 예외 전파
         try:
-            with PILImage.open(file_path) as img:
-                w, h = img.size
-            return file_path.stat().st_size, w, h
-        except Exception:
-            return file_path.stat().st_size, None, None
+            file_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 @router.post("/image")
@@ -212,15 +211,32 @@ async def upload_image(
         )
 
     try:
-        # 파일 크기 체크
-        content = await file.read()
-        file_size = len(content)
-
-        if file_size > MAX_FILE_SIZE:
+        # 파일 크기 체크 (스트리밍 방식, 메모리 보호)
+        chunks = []
+        total = 0
+        chunk_size = 64 * 1024  # 64 KB
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File size exceeds maximum allowed size of {MAX_FILE_SIZE // (1024 * 1024)}MB"
+                )
+            chunks.append(chunk)
+        content = b"".join(chunks)
+        # 실제 이미지 포맷 검증 (magic bytes)
+        try:
+            with PILImage.open(BytesIO(content[:512])) as probe:
+                probe.verify()
+        except Exception:
             raise HTTPException(
                 status_code=400,
-                detail=f"File size exceeds maximum allowed size of {MAX_FILE_SIZE / (1024*1024)}MB"
+                detail="File is not a valid image"
             )
+        file_size = len(content)
 
         # 고유한 파일명 생성 (storage_key)
         unique_filename = generate_unique_filename(
@@ -267,14 +283,15 @@ async def upload_image(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         await db.rollback()
+        logger.exception("Failed to upload image")
         # 에러 발생 시 파일 삭제
         if file_path and file_path.exists():
             file_path.unlink()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to upload image: {str(e)}"
+            detail="Internal server error"
         )
     finally:
         await file.close()
@@ -340,11 +357,12 @@ async def delete_image(
             "success": True,
             "message": f"Image {filename} deleted successfully"
         }
-    except Exception as e:
+    except Exception:
         await db.rollback()
+        logger.exception("Failed to delete image")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to delete image: {str(e)}"
+            detail="Internal server error"
         )
 
 

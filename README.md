@@ -14,9 +14,9 @@ React + FastAPI 기반의 개인 블로그 플랫폼입니다.
 - 마크다운 에디터(실시간 미리보기, 코드 하이라이트, KaTeX/ Mermaid 렌더링)
 - 게시글 CRUD(초안/발행, 태그/검색/페이지네이션, 슬러그 기반 조회)
 - 비밀글(`is_secret`) 및 인증 사용자 전용 조회 흐름
-- 이미지 업로드(5MB 제한, 최적화, 게시글 본문 기반 자동 연결/해제)
+- 이미지 업로드(5MB 제한, 스트리밍 크기 검사, 포맷 검증, 최적화, 게시글 본문 기반 자동 연결/해제)
 - orphan 이미지 자동 정리(스케줄러 + 관리자 강제 정리 API)
-- JWT 쿠키 인증(Access + Refresh Rotation, Redis 블랙리스트)
+- JWT 쿠키 인증(Access + Refresh Rotation, Redis 블랙리스트, `/api/auth/refresh` rate limit)
 
 ## 기술 스택
 
@@ -88,6 +88,8 @@ ADMIN_EMAIL=admin@example.com
 SITE_URL=https://yourdomain.com
 SITE_NAME=YSG Blog
 ```
+> [!WARNING]
+> `SECRET_KEY`, `ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`는 예시값으로 두지 말고 배포 전 반드시 강한 값으로 교체하세요. `SITE_URL`은 프로덕션에서 Open Graph canonical URL 생성을 위해 설정을 권장합니다.
 
 세부 변수는 각 문서를 참고하세요.
 

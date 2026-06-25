@@ -87,7 +87,6 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_SITE_NAME: ${SITE_NAME:-YSG Blog}
-        VITE_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
     environment:
       TZ: ${TIMEZONE:-Asia/Seoul}
     restart: unless-stopped

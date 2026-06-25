@@ -46,7 +46,6 @@ npm run lint     # ESLint
 ```env
 VITE_API_URL=http://localhost:8000
 VITE_SITE_NAME=YSG Blog
-VITE_ADMIN_EMAIL=admin@example.com
 ```
 
 > [!TIP]

@@ -5,9 +5,9 @@ FastAPI 기반 백엔드 API 서버입니다.
 
 ## 핵심 기능
 
-- JWT 쿠키 인증 (`/api/auth/login`, `/refresh`, `/me`, `/logout`)
-- 게시글 CRUD + 슬러그 조회 + 조회수 증가 + 비밀글 처리
-- 이미지 업로드/최적화(리사이즈, 포맷별 압축) 및 게시글 자동 연결
+- JWT 인증 (`/api/auth/login`, `/refresh`, `/me`, `/logout`), Redis 블랙리스트, `/api/auth/refresh` rate limit
+- 게시글 CRUD + 슬러그 조회 + 조회수 증가 + 비밀글 처리 + 서버측 HTML 정제(`nh3`)
+- 이미지 업로드/최적화(5MB 스트리밍 제한, magic-bytes 검증, 리사이즈, 포맷별 압축) 및 게시글 자동 연결
 - orphan 이미지 자동 정리 스케줄러 + 관리자 수동 정리 API
 - Redis 캐시(목록/상세/태그) 및 캐시 무효화
 - `ENV=production`에서 문서 엔드포인트 자동 비활성화
@@ -35,7 +35,7 @@ python main.py
 | Method | Path | 설명 |
 |---|---|---|
 | `POST` | `/api/auth/login` | 로그인 및 쿠키 발급 |
-| `POST` | `/api/auth/refresh` | 리프레시 토큰으로 재발급(회전) |
+| `POST` | `/api/auth/refresh` | 리프레시 토큰으로 재발급(회전, IP당 분당 10회 제한) |
 | `GET` | `/api/auth/me` | 현재 사용자 조회 |
 | `POST` | `/api/auth/logout` | 로그아웃 + 블랙리스트 등록 |
 
@@ -56,7 +56,7 @@ python main.py
 
 | Method | Path | 설명 |
 |---|---|---|
-| `POST` | `/api/upload/image` | 이미지 업로드(인증 필요) |
+| `POST` | `/api/upload/image` | 이미지 업로드(인증 필요, 5MB 스트리밍 제한 + 실제 이미지 포맷 검증) |
 | `GET` | `/api/upload/temp/{filename}` | 임시 이미지 정보 |
 | `DELETE` | `/api/upload/image/{filename}` | 이미지 삭제(인증 필요) |
 | `GET` | `/api/upload/admin/orphans` | orphan 통계(인증 필요) |
@@ -87,6 +87,11 @@ BASE_URL=http://localhost:8000
 SITE_URL=
 SITE_NAME=YSG Blog
 ```
+
+> [!WARNING]
+> `SECRET_KEY`, `ADMIN_PASSWORD`, `DB_PASSWORD`/`DATABASE_URL`, `REDIS_URL`은 반드시 실제 비밀값으로 설정하고, 예시 자격증명이나 기본 비밀번호를 재사용하지 마세요.
+>
+> `SITE_URL`은 프로덕션에서 Open Graph URL 생성을 위해 설정을 권장합니다. 비워두면 개발용 요청 정보만 사용합니다.
 
 > [!NOTE]
 > DB 접속은 `DB_HOST/DB_USER/DB_PASSWORD/DB_NAME`가 모두 있으면 이를 우선 사용하고, 없으면 `DATABASE_URL`로 동작합니다.

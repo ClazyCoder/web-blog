@@ -109,6 +109,7 @@ async def login(request: Request, user_data: UserLogin, response: Response):
 
 
 @router.post("/refresh")
+@limiter.limit("10/minute")
 async def refresh(
     request: Request,
     response: Response,

@@ -58,14 +58,17 @@ def strip_markdown(text: str, max_length: int = 200) -> str:
 
 
 def _get_site_url(request: Request) -> str:
-    """요청 헤더 또는 환경변수에서 사이트 기본 URL 추출"""
+    """환경변수 SITE_URL에서 사이트 기본 URL 추출 (Host 헤더 사용 금지)"""
     site_url = os.getenv("SITE_URL", "").rstrip("/")
     if site_url:
         return site_url
-
-    # 요청 헤더에서 추론
-    proto = request.headers.get("x-forwarded-proto", "https")
-    host = request.headers.get("host", "localhost")
+    # SITE_URL이 없으면 ASGI scope의 실제 요청 정보를 사용한다.
+    # 원시 Host/X-Forwarded-* 헤더는 신뢰하지 않는다.
+    proto = request.scope.get("scheme", "http")
+    server = request.scope.get("server") or ("localhost", None)
+    host, port = server
+    if port and port not in (80, 443):
+        return f"{proto}://{host}:{port}"
     return f"{proto}://{host}"
 
 

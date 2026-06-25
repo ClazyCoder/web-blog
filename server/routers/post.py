@@ -8,10 +8,10 @@ from sqlalchemy import cast, desc, func, or_, select, String
 from sqlalchemy.orm import selectinload
 from typing import Optional, List
 import json
+import logging
 import re
 from collections import Counter
 from datetime import datetime
-
 from db.session import get_db
 from db.redis import cache_get, cache_set, cache_delete_pattern, check_and_set_view
 from models.post import Post
@@ -20,6 +20,7 @@ from auth import get_current_user, get_current_user_optional
 from schemas.post import PostCreate, PostUpdate, PostResponse, PaginatedPostResponse
 from rate_limit import limiter, get_client_ip
 
+logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/posts",
     tags=["posts"]
@@ -226,11 +227,12 @@ async def create_post(
             deleted_at=None,
         )
         
-    except Exception as e:
+    except Exception:
         await db.rollback()
+        logger.exception("게시글 생성 실패")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"게시글 생성 실패: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -321,12 +323,11 @@ async def get_posts(
 
         return response_data
         
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("게시글 목록 조회 실패")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"게시글 목록 조회 실패: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -387,10 +388,11 @@ async def get_all_tags(
 
         return response_data
         
-    except Exception as e:
+    except Exception:
+        logger.exception("태그 목록 조회 실패")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"태그 목록 조회 실패: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -501,11 +503,12 @@ async def update_post(
         
         return PostResponse(**post.to_dict())
         
-    except Exception as e:
+    except Exception:
         await db.rollback()
+        logger.exception("게시글 수정 실패")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"게시글 수정 실패: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -560,11 +563,12 @@ async def delete_post(
         # 캐시 무효화
         await cache_delete_pattern("cache:posts:*")
         
-    except Exception as e:
+    except Exception:
         await db.rollback()
+        logger.exception("게시글 삭제 실패")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"게시글 삭제 실패: {str(e)}"
+            detail="Internal server error"
         )
 
 

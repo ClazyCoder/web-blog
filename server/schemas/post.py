@@ -3,39 +3,33 @@
 """
 
 from typing import Optional, List
+
+import nh3
 from pydantic import BaseModel, Field, field_validator
-import re
 
 
-SCRIPT_TAG_RE = re.compile(r"<script\b[^>]*>.*?</script\s*>", re.IGNORECASE | re.DOTALL)
-BLOCKED_TAG_RE = re.compile(r"</?(?:iframe|object|embed|meta|link|base)\b[^>]*>", re.IGNORECASE)
-EVENT_HANDLER_ATTR_RE = re.compile(
-    r"\s+on[a-zA-Z0-9_-]+\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)",
-    re.IGNORECASE,
-)
-DANGEROUS_URL_ATTR_RE = re.compile(
-    r"\s+(?:href|src|xlink:href|formaction)\s*=\s*"
-    r"(?:\"(?:\s*(?:javascript:|data:text/html)[^\"]*)\""
-    r"|'(?:\s*(?:javascript:|data:text/html)[^']*)'"
-    r"|(?:\s*(?:javascript:|data:text/html)[^\s>]+))",
-    re.IGNORECASE,
-)
+# Allowlist: only formatting tags meaningful in blog markdown.
+# Script, iframe, object, embed, base, link, meta are blocked by default in nh3.
+_ALLOWED_TAGS = {
+    "p", "br", "b", "i", "em", "strong", "a", "ul", "ol", "li",
+    "blockquote", "code", "pre", "h1", "h2", "h3", "h4", "h5", "h6",
+    "hr", "img", "table", "thead", "tbody", "tr", "th", "td",
+    "sub", "sup", "mark", "abbr", "details", "summary",
+}
+_ALLOWED_ATTRS = {
+    "a": {"href", "title", "rel"},
+    "img": {"src", "alt", "title", "width", "height"},
+    "*": {"class", "id"},
+}
 
 
 def sanitize_html_input(value: str) -> str:
-    """
-    XSS 방지용 최소 정제 함수.
-    - 일반 텍스트는 보존
-    - 실제 HTML 태그/script/event-attr/dangerous URL 속성만 제거
-    """
+    """XSS 방지: nh3 라이브러리를 이용한 HTML 정제"""
     if not value:
         return value
-
-    cleaned = SCRIPT_TAG_RE.sub("", value)
-    cleaned = BLOCKED_TAG_RE.sub("", cleaned)
-    cleaned = EVENT_HANDLER_ATTR_RE.sub("", cleaned)
-    cleaned = DANGEROUS_URL_ATTR_RE.sub("", cleaned)
-    return cleaned
+    if "<" not in value:
+        return value
+    return nh3.clean(value, tags=_ALLOWED_TAGS, attributes=_ALLOWED_ATTRS, link_rel=None)
 
 
 class PostCreate(BaseModel):
@@ -48,7 +42,7 @@ class PostCreate(BaseModel):
     status: str = Field("draft", description="게시 상태: draft, published")
     is_secret: bool = Field(False, description="비밀글 여부")
     
-    @field_validator('title', 'content')
+    @field_validator('title', 'content', 'excerpt')
     @classmethod
     def sanitize_html(cls, v):
         return sanitize_html_input(v)
@@ -90,7 +84,7 @@ class PostUpdate(BaseModel):
     status: Optional[str] = None
     is_secret: Optional[bool] = None
     
-    @field_validator('title', 'content')
+    @field_validator('title', 'content', 'excerpt')
     @classmethod
     def sanitize_html(cls, v):
         return sanitize_html_input(v)
