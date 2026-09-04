@@ -1,7 +1,7 @@
 import React from 'react';
 
 const Footer: React.FC = () => {
-    const contactEmail = 'admin@example.com';
+    const contactEmail = import.meta.env.VITE_ADMIN_EMAIL || 'admin@example.com';
     const siteName = import.meta.env.VITE_SITE_NAME || 'YSG Blog';
     const currentYear = new Date().getFullYear();
 

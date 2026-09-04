@@ -88,6 +88,8 @@ ADMIN_EMAIL=admin@example.com
 SITE_URL=https://yourdomain.com
 SITE_NAME=YSG Blog
 ```
+
+`ADMIN_EMAIL` is embedded in the client bundle for the footer, so rebuild the `client` image after changing it (for example, `docker compose up -d --build client`).
 > [!WARNING]
 > `SECRET_KEY`, `ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`는 예시값으로 두지 말고 배포 전 반드시 강한 값으로 교체하세요. `SITE_URL`은 프로덕션에서 Open Graph canonical URL 생성을 위해 설정을 권장합니다.
 
