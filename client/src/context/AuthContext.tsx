@@ -1,23 +1,9 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import axios from 'axios';
 import api from '../utils/api';
-
-interface User {
-    id: string;
-    username: string;
-    email: string;
-}
-
-export interface AuthContextType {
-    user: User | null;
-    isAuthenticated: boolean;
-    login: (username: string, password: string, rememberMe?: boolean) => Promise<boolean>;
-    logout: () => Promise<void>;
-    isLoading: boolean;
-}
-
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+import { AuthContext } from './auth';
+import type { User } from './auth';
 const AUTH_SESSION_HINT_KEY = 'auth.hasSessionHint';
 
 const hasSessionHint = (): boolean => {
@@ -124,6 +110,3 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         </AuthContext.Provider>
     );
 };
-
-// re-export: 기존 import 경로 호환
-export { useAuth } from './useAuth';

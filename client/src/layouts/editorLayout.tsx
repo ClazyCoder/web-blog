@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
+import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,10 +10,11 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import 'highlight.js/styles/github-dark-dimmed.css';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { setNavigationGuard, clearNavigationGuard } from '../utils/navigationGuard';
 import { UnauthorizedAccess, EditorSidebar } from '../components';
-import MarkdownCodeBlock, { InCodeFenceContext } from '../components/MarkdownCodeBlock';
+import MarkdownCodeBlock from '../components/MarkdownCodeBlock';
+import MarkdownCode from '../components/MarkdownCode';
 import api from '../utils/api';
 
 interface EditorData {
@@ -31,6 +33,52 @@ interface UploadedImage {
     url: string;
     filename: string;
     uploadedAt: number;
+}
+
+interface DraftSummary {
+    id: number;
+    title: string;
+    updated_at: string;
+}
+
+interface EditorImageResponse {
+    file_url: string;
+    filename: string;
+    original_filename?: string | null;
+    created_at?: string | null;
+}
+
+interface EditorPostResponse {
+    id: number;
+    title: string;
+    content: string;
+    tags?: string[];
+    is_secret?: boolean;
+    status: string;
+    images?: EditorImageResponse[];
+}
+
+interface ApiErrorResponse {
+    detail?: unknown;
+}
+
+function getApiErrorMessage(error: unknown, fallback: string): string {
+    if (axios.isAxiosError<ApiErrorResponse>(error)) {
+        const detail = error.response?.data?.detail;
+        if (typeof detail === 'string') return detail;
+    }
+    return error instanceof Error ? error.message : fallback;
+}
+
+function syncScrollByRatio(source: HTMLElement, target: HTMLElement) {
+    const sourceScrollable = source.scrollHeight - source.clientHeight;
+    const targetScrollable = target.scrollHeight - target.clientHeight;
+    if (sourceScrollable <= 0 || targetScrollable <= 0) {
+        target.scrollTop = 0;
+        return;
+    }
+    const scrollRatio = source.scrollTop / sourceScrollable;
+    target.scrollTop = scrollRatio * targetScrollable;
 }
 
 interface EditorMarkdownPreviewProps {
@@ -95,16 +143,7 @@ const EditorMarkdownPreview = React.memo<EditorMarkdownPreviewProps>(({ markdown
                     {children}
                 </strong>
             ),
-            code: ({ className, children }) => {
-                const inFence = React.useContext(InCodeFenceContext);
-                return inFence ? (
-                    <code className={className}>{children}</code>
-                ) : (
-                    <code className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">
-                        {children}
-                    </code>
-                );
-            },
+            code: MarkdownCode,
             pre: ({ children }) => (
                 <MarkdownCodeBlock>{children}</MarkdownCodeBlock>
             ),
@@ -212,11 +251,11 @@ const EditorLayout: React.FC = () => {
             // 새 글 작성 모드: 임시저장 글이 있는지 확인
             const fetchDrafts = async () => {
                 try {
-                    const response = await api.get('/api/posts', {
+                    const response = await api.get<{ items: DraftSummary[] }>('/api/posts', {
                         params: { status: 'draft', limit: 5 }
                     });
                     if (response.data.items.length > 0) {
-                        setDrafts(response.data.items.map((d: any) => ({
+                        setDrafts(response.data.items.map(d => ({
                             id: d.id,
                             title: d.title,
                             updated_at: d.updated_at,
@@ -234,7 +273,7 @@ const EditorLayout: React.FC = () => {
         const fetchPost = async () => {
             try {
                 setIsLoadingPost(true);
-                const response = await api.get(`/api/posts/${paramId}`);
+                const response = await api.get<EditorPostResponse>(`/api/posts/${paramId}`);
                 const post = response.data;
                 const loadedData = {
                     title: post.title,
@@ -250,7 +289,7 @@ const EditorLayout: React.FC = () => {
 
                 // 서버 DB에서 관리하는 이미지 목록을 사이드바에 표시
                 if (post.images && post.images.length > 0) {
-                    const existingImages: UploadedImage[] = post.images.map((img: any) => ({
+                    const existingImages: UploadedImage[] = post.images.map(img => ({
                         url: img.file_url,
                         filename: img.original_filename || img.filename,
                         uploadedAt: new Date(img.created_at || Date.now()).getTime(),
@@ -358,17 +397,6 @@ const EditorLayout: React.FC = () => {
         };
     }, [isResizing]);
 
-    const syncScrollByRatio = (source: HTMLElement, target: HTMLElement) => {
-        const sourceScrollable = source.scrollHeight - source.clientHeight;
-        const targetScrollable = target.scrollHeight - target.clientHeight;
-        if (sourceScrollable <= 0 || targetScrollable <= 0) {
-            target.scrollTop = 0;
-            return;
-        }
-        const scrollRatio = source.scrollTop / sourceScrollable;
-        target.scrollTop = scrollRatio * targetScrollable;
-    };
-
     const handleEditorScroll = () => {
         const editorEl = editorTextareaRef.current;
         const previewEl = previewContainerRef.current;
@@ -399,12 +427,12 @@ const EditorLayout: React.FC = () => {
         });
     };
 
-    const syncPreviewToEditorPosition = () => {
+    const syncPreviewToEditorPosition = useCallback(() => {
         const editorEl = editorTextareaRef.current;
         const previewEl = previewContainerRef.current;
         if (!editorEl || !previewEl) return;
         syncScrollByRatio(editorEl, previewEl);
-    };
+    }, []);
 
     useEffect(() => {
         if (!showPreview) return;
@@ -422,7 +450,7 @@ const EditorLayout: React.FC = () => {
             cancelAnimationFrame(frame1);
             cancelAnimationFrame(frame2);
         };
-    }, [showPreview]);
+    }, [showPreview, syncPreviewToEditorPosition]);
 
     useEffect(() => {
         if (!showPreview) return;
@@ -445,7 +473,7 @@ const EditorLayout: React.FC = () => {
             cancelAnimationFrame(frame1);
             cancelAnimationFrame(frame2);
         };
-    }, [editorData.markdown, showPreview, editorWidth, isPreviewMode]);
+    }, [editorData.markdown, showPreview, editorWidth, isPreviewMode, syncPreviewToEditorPosition]);
 
     const handleToggleMobilePreviewMode = () => {
         const nextPreviewMode = !isPreviewMode;
@@ -534,14 +562,13 @@ const EditorLayout: React.FC = () => {
                 // 상태 유지 저장: 게시글 페이지로 이동
                 navigate(`/board/${response.data.id}`);
             }
-        } catch (err: any) {
+        } catch (error: unknown) {
             // 세션 만료(401): 편집 내용 보존, 재로그인 안내
-            if (err.response?.status === 401) {
+            if (axios.isAxiosError(error) && error.response?.status === 401) {
                 handleAuthExpired();
                 return;
             }
-            const message = err.response?.data?.detail || '저장에 실패했습니다.';
-            alert(message);
+            alert(getApiErrorMessage(error, '저장에 실패했습니다.'));
         } finally {
             setIsSaving(false);
             setIsDraftSaving(false);
@@ -596,7 +623,7 @@ const EditorLayout: React.FC = () => {
         try {
             setUploadProgress({ fileName: file.name, progress: 0 });
 
-            const response = await api.post('/api/upload/image', formData, {
+            const response = await api.post<{ url: string; filename?: string }>('/api/upload/image', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
                 _skipAuthRedirect: true, // 401 시 하드 리다이렉트 방지
                 onUploadProgress: (progressEvent) => {
@@ -626,20 +653,17 @@ const EditorLayout: React.FC = () => {
             // 서버 응답: { success: true, url: "http://...", filename: "..." }
             return data.url;
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Image upload failed:', error);
             setUploadProgress(null);
 
             // 세션 만료(401): 편집 내용 보존, 재로그인 안내
-            if (error.response?.status === 401) {
+            if (axios.isAxiosError(error) && error.response?.status === 401) {
                 handleAuthExpired();
                 throw error;
             }
 
-            const errorMessage = error.response?.data?.detail
-                || (error instanceof Error ? error.message : '이미지 업로드에 실패했습니다.');
-
-            alert(errorMessage);
+            alert(getApiErrorMessage(error, '이미지 업로드에 실패했습니다.'));
             throw error;
         }
     };
@@ -1370,13 +1394,11 @@ const EditorLayout: React.FC = () => {
                 .toolbar-btn:hover {
                     background-color: rgb(243, 244, 246);
                 }
-                @media (prefers-color-scheme: dark) {
-                    .toolbar-btn {
+                .dark .toolbar-btn {
                         color: rgb(209, 213, 219);
-                    }
-                    .toolbar-btn:hover {
+                }
+                .dark .toolbar-btn:hover {
                         background-color: rgb(55, 65, 81);
-                    }
                 }
                 /* 모바일에서 에디터/미리보기 영역 전체 너비 강제 */
                 @media (max-width: 1023px) {

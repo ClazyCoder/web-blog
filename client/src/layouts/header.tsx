@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/useAuth';
 import { confirmNavigation } from '../utils/navigationGuard';
+import ThemeToggle from '../components/ThemeToggle';
 
 const Header: React.FC = () => {
     const { user, isAuthenticated, logout } = useAuth();
@@ -9,14 +10,7 @@ const Header: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const navigate = useNavigate();
-    const location = useLocation();
     const userMenuRef = useRef<HTMLDivElement>(null);
-
-    // 라우트 변경 시 메뉴 닫기
-    useEffect(() => {
-        setIsMobileMenuOpen(false);
-        setShowUserMenu(false);
-    }, [location.pathname]);
 
     // 스크롤 시 헤더 배경 강화
     useEffect(() => {
@@ -41,7 +35,10 @@ const Header: React.FC = () => {
     const handleNavClick = (e: React.MouseEvent) => {
         if (!confirmNavigation()) {
             e.preventDefault();
+            return;
         }
+        setIsMobileMenuOpen(false);
+        setShowUserMenu(false);
     };
 
     const handleLogout = () => {
@@ -126,6 +123,8 @@ const Header: React.FC = () => {
                             )}
                         </div>
 
+                        <ThemeToggle className="mr-4" />
+
                         {/* 구분선 */}
                         <div className="w-px h-5 bg-gray-700 mr-4" />
 
@@ -194,29 +193,32 @@ const Header: React.FC = () => {
                     </div>
 
                     {/* 모바일 햄버거 버튼 */}
-                    <button
-                        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                        className="md:hidden relative w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
-                        aria-label={isMobileMenuOpen ? '메뉴 닫기' : '메뉴 열기'}
-                    >
-                        <div className="relative w-5 h-4">
-                            <span
-                                className={`absolute left-0 right-0 h-0.5 bg-white rounded-full transition-all duration-300 ${
-                                    isMobileMenuOpen ? 'top-1/2 -translate-y-1/2 rotate-45' : 'top-0'
-                                }`}
-                            />
-                            <span
-                                className={`absolute left-0 right-0 h-0.5 bg-white rounded-full top-1/2 -translate-y-1/2 transition-all duration-300 ${
-                                    isMobileMenuOpen ? 'opacity-0 scale-x-0' : 'opacity-100'
-                                }`}
-                            />
-                            <span
-                                className={`absolute left-0 right-0 h-0.5 bg-white rounded-full transition-all duration-300 ${
-                                    isMobileMenuOpen ? 'top-1/2 -translate-y-1/2 -rotate-45' : 'bottom-0'
-                                }`}
-                            />
-                        </div>
-                    </button>
+                    <div className="flex items-center gap-1 md:hidden">
+                        <ThemeToggle />
+                        <button
+                            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                            className="relative w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
+                            aria-label={isMobileMenuOpen ? '메뉴 닫기' : '메뉴 열기'}
+                        >
+                            <div className="relative w-5 h-4">
+                                <span
+                                    className={`absolute left-0 right-0 h-0.5 bg-white rounded-full transition-all duration-300 ${
+                                        isMobileMenuOpen ? 'top-1/2 -translate-y-1/2 rotate-45' : 'top-0'
+                                    }`}
+                                />
+                                <span
+                                    className={`absolute left-0 right-0 h-0.5 bg-white rounded-full top-1/2 -translate-y-1/2 transition-all duration-300 ${
+                                        isMobileMenuOpen ? 'opacity-0 scale-x-0' : 'opacity-100'
+                                    }`}
+                                />
+                                <span
+                                    className={`absolute left-0 right-0 h-0.5 bg-white rounded-full transition-all duration-300 ${
+                                        isMobileMenuOpen ? 'top-1/2 -translate-y-1/2 -rotate-45' : 'bottom-0'
+                                    }`}
+                                />
+                            </div>
+                        </button>
+                    </div>
                 </nav>
             </div>
 

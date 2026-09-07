@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import axios from 'axios';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,12 +10,13 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import 'highlight.js/styles/github-dark-dimmed.css';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import api from '../utils/api';
 import { parseMarkdownHeadings, extractTextFromChildren, slugifyHeadingText } from '../utils/tocParser';
 import type { TocItem } from '../utils/tocParser';
 import TableOfContents from '../components/TableOfContents';
-import MarkdownCodeBlock, { InCodeFenceContext } from '../components/MarkdownCodeBlock';
+import MarkdownCodeBlock from '../components/MarkdownCodeBlock';
+import MarkdownCode from '../components/MarkdownCode';
 
 interface PostData {
     id: number;
@@ -134,16 +136,7 @@ const PostMarkdownContent = React.memo<PostMarkdownContentProps>(({ content, hea
                             {children}
                         </strong>
                     ),
-                    code: ({ className, children }) => {
-                        const inFence = React.useContext(InCodeFenceContext);
-                        return inFence ? (
-                            <code className={className}>{children}</code>
-                        ) : (
-                            <code className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">
-                                {children}
-                            </code>
-                        );
-                    },
+                    code: MarkdownCode,
                     pre: ({ children }) => (
                         <MarkdownCodeBlock>{children}</MarkdownCodeBlock>
                     ),
@@ -241,9 +234,9 @@ const PageLayout: React.FC = () => {
                     viewCounted.current = true;
                     api.post(`/api/posts/${id}/view`).catch(() => { });
                 }
-            } catch (err: any) {
+            } catch (error: unknown) {
                 if (controller.signal.aborted) return;
-                if (err.response?.status === 404) {
+                if (axios.isAxiosError(error) && error.response?.status === 404) {
                     if (!isAuthenticated && !hasRedirectedAfterAccessLoss.current) {
                         hasRedirectedAfterAccessLoss.current = true;
                         navigate('/board', { replace: true });
@@ -263,7 +256,7 @@ const PageLayout: React.FC = () => {
         fetchPost();
 
         return () => controller.abort();
-    }, [authLoading, id, isAuthenticated]);
+    }, [authLoading, id, isAuthenticated, navigate]);
 
     // 마크다운에서 헤딩 파싱
     const headings = useMemo(() => {

@@ -1,16 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-
-/** `<pre>`(MarkdownCodeBlock) 내부의 fenced `<code>`는 true — className 유무로 inline 판단하지 않도록 함 */
-export const InCodeFenceContext = React.createContext(false);
-
-const FenceLanguageLabel: React.FC<{ language: string }> = ({ language }) => (
-    <span
-        className="pointer-events-none absolute left-3 top-2 z-10 select-none rounded bg-gray-800/60 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide text-gray-300 backdrop-blur"
-        aria-hidden="true"
-    >
-        {language}
-    </span>
-);
+import { useTheme } from '../context/useTheme';
+import { InCodeFenceContext } from '../context/codeFenceContext';
 
 const extractCodeText = (node: React.ReactNode): string => {
     if (node == null) return '';
@@ -29,14 +19,14 @@ function normalizeClassName(className: unknown): string {
 }
 
 function getFenceLanguage(children: React.ReactNode): string | null {
-    let lang: string | null = null;
+    let language: string | null = null;
     const visit = (node: React.ReactNode): void => {
-        if (lang) return;
+        if (language) return;
         if (React.isValidElement(node)) {
-            const cn = normalizeClassName((node.props as { className?: unknown }).className);
-            const m = cn.match(/language-([^\s]+)/);
-            if (m) {
-                lang = m[1].toLowerCase();
+            const className = normalizeClassName((node.props as { className?: unknown }).className);
+            const match = className.match(/language-([^\s]+)/);
+            if (match) {
+                language = match[1].toLowerCase();
                 return;
             }
             visit((node.props as { children?: React.ReactNode }).children);
@@ -45,118 +35,132 @@ function getFenceLanguage(children: React.ReactNode): string | null {
         }
     };
     visit(children);
-    return lang;
+    return language;
 }
 
-function usePrefersDarkScheme(): boolean {
-    const [dark, setDark] = useState(() =>
-        typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false
-    );
-
-    useEffect(() => {
-        const mq = window.matchMedia('(prefers-color-scheme: dark)');
-        const onChange = () => setDark(mq.matches);
-        mq.addEventListener('change', onChange);
-        return () => mq.removeEventListener('change', onChange);
-    }, []);
-
-    return dark;
+interface CodeBlockHeaderProps {
+    language: string | null;
+    copied: boolean;
+    onCopy: () => void;
 }
 
-/**
- * mermaid.render(고정 id)는 Strict Mode·재렌더 시 DOM id 충돌이 나기 쉬우므로,
- * 공식 run({ nodes }) 경로로 노드별 자동 id를 쓰도록 한다.
- */
+const CodeBlockHeader: React.FC<CodeBlockHeaderProps> = ({ language, copied, onCopy }) => (
+    <div className="flex min-h-11 items-center justify-between gap-3 border-b border-slate-700/80 bg-[#182235] px-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+            <span
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-emerald-400/10 font-mono text-[11px] font-bold text-emerald-300 ring-1 ring-inset ring-emerald-300/15"
+                aria-hidden="true"
+            >
+                &gt;_
+            </span>
+            <span className="truncate font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+                {language || 'code'}
+            </span>
+        </div>
+        <button
+            type="button"
+            onClick={onCopy}
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+                copied
+                    ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+                    : 'border-slate-600/70 bg-slate-800/60 text-slate-300 hover:border-slate-500 hover:bg-slate-700/70 hover:text-white'
+            }`}
+            aria-label={copied ? '코드 복사 완료' : '코드 복사'}
+            title={copied ? '복사됨' : '코드 복사'}
+        >
+            {copied ? (
+                <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.414l-7.2 7.2a1 1 0 01-1.415 0l-3.2-3.2a1 1 0 111.414-1.414l2.493 2.493 6.493-6.493a1 1 0 011.415 0z" clipRule="evenodd" />
+                </svg>
+            ) : (
+                <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" aria-hidden="true">
+                    <rect x="6" y="6" width="9" height="10" rx="1.5" strokeWidth="1.5" />
+                    <path d="M12.5 6V4.5A1.5 1.5 0 0 0 11 3H5a1.5 1.5 0 0 0-1.5 1.5V12A1.5 1.5 0 0 0 5 13.5h1" strokeWidth="1.5" />
+                </svg>
+            )}
+            <span aria-live="polite">{copied ? '복사됨' : '복사'}</span>
+        </button>
+    </div>
+);
+
+/** Mermaid는 현재 페이지 테마와 함께 다시 렌더링한다. */
 const MermaidDiagram: React.FC<{ code: string }> = ({ code }) => {
     const hostRef = useRef<HTMLDivElement>(null);
     const runGenerationRef = useRef(0);
     const [error, setError] = useState<string | null>(null);
-    const prefersDark = usePrefersDarkScheme();
+    const { theme } = useTheme();
 
     useEffect(() => {
-        const el = hostRef.current;
-        if (!el) return undefined;
+        const element = hostRef.current;
+        if (!element) return undefined;
 
         runGenerationRef.current += 1;
-        const gen = runGenerationRef.current;
+        const generation = runGenerationRef.current;
         let cancelled = false;
 
-        el.classList.add('mermaid');
-        el.removeAttribute('data-processed');
-        el.textContent = code.trim();
+        element.classList.add('mermaid');
+        element.removeAttribute('data-processed');
+        element.textContent = code.trim();
 
         void (async () => {
             try {
                 const mermaid = (await import('mermaid')).default;
                 mermaid.initialize({
                     startOnLoad: false,
-                    theme: prefersDark ? 'dark' : 'default',
+                    theme: theme === 'dark' ? 'dark' : 'default',
                     securityLevel: 'loose',
                 });
-                if (cancelled || gen !== runGenerationRef.current) return;
-                await mermaid.run({ nodes: [el] });
-                if (cancelled || gen !== runGenerationRef.current) return;
+                if (cancelled || generation !== runGenerationRef.current) return;
+                await mermaid.run({ nodes: [element] });
+                if (cancelled || generation !== runGenerationRef.current) return;
                 setError(null);
-            } catch (e) {
-                if (!cancelled && gen === runGenerationRef.current) {
-                    const message = e instanceof Error ? e.message : String(e);
+            } catch (renderError) {
+                if (!cancelled && generation === runGenerationRef.current) {
+                    const message = renderError instanceof Error ? renderError.message : String(renderError);
                     setError(message);
-                    el.innerHTML = '';
-                    el.removeAttribute('data-processed');
+                    element.innerHTML = '';
+                    element.removeAttribute('data-processed');
                 }
             }
         })();
 
         return () => {
             cancelled = true;
-            el.removeAttribute('data-processed');
-            el.classList.remove('mermaid');
-            el.innerHTML = '';
+            element.removeAttribute('data-processed');
+            element.classList.remove('mermaid');
+            element.innerHTML = '';
         };
-    }, [code, prefersDark]);
+    }, [code, theme]);
 
     return (
-        <div className="space-y-2">
+        <div>
             {error ? (
-                <>
-                    <div
-                        className="rounded-md border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200"
-                        role="alert"
-                    >
-                        Mermaid 렌더 오류: {error}
-                    </div>
-                    <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono whitespace-pre-wrap">
-                        {code}
-                    </pre>
-                </>
+                <div className="border-b border-red-400/20 bg-red-950/40 px-4 py-3 text-sm text-red-200" role="alert">
+                    Mermaid 렌더 오류: {error}
+                </div>
             ) : null}
-            {/* ref 호스트는 항상 마운트: 오류 후 소스 수정 시에도 effect가 다시 돈다 */}
             <div
                 ref={hostRef}
-                className={`flex min-h-16 justify-center overflow-x-auto rounded-lg border border-gray-500/30 bg-white p-4 dark:border-gray-600/40 dark:bg-gray-950 [&_svg]:max-w-full ${error ? 'hidden' : ''}`}
+                className={`flex min-h-28 justify-center overflow-x-auto bg-slate-50 p-5 dark:bg-[#0f172a] sm:p-7 [&_svg]:max-w-full ${error ? 'hidden' : ''}`}
                 aria-hidden={error ? true : undefined}
             />
+            {error ? (
+                <pre className="m-0 overflow-x-auto bg-[#111827] px-5 py-5 font-mono text-[13px] leading-6 text-slate-200 whitespace-pre-wrap">
+                    {code}
+                </pre>
+            ) : null}
         </div>
     );
 };
 
-/**
- * 마크다운 fenced code 블록용: 일반 코드는 하이라이트된 children을 그대로 표시하고,
- * ` ```mermaid ` 는 Mermaid로 렌더링한다.
- */
 const MarkdownCodeBlock: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [copied, setCopied] = useState(false);
     const copiedTimerRef = useRef<number | null>(null);
-
     const language = useMemo(() => getFenceLanguage(children), [children]);
     const codeText = useMemo(() => extractCodeText(children), [children]);
 
-    useEffect(() => {
-        return () => {
-            if (copiedTimerRef.current) {
-                window.clearTimeout(copiedTimerRef.current);
-            }
-        };
+    useEffect(() => () => {
+        if (copiedTimerRef.current) window.clearTimeout(copiedTimerRef.current);
     }, []);
 
     const handleCopy = async () => {
@@ -166,72 +170,25 @@ const MarkdownCodeBlock: React.FC<{ children: React.ReactNode }> = ({ children }
             await navigator.clipboard.writeText(codeText);
             setCopied(true);
 
-            if (copiedTimerRef.current) {
-                window.clearTimeout(copiedTimerRef.current);
-            }
-
-            copiedTimerRef.current = window.setTimeout(() => {
-                setCopied(false);
-            }, 1400);
-        } catch (err) {
-            console.error('코드 복사 실패:', err);
+            if (copiedTimerRef.current) window.clearTimeout(copiedTimerRef.current);
+            copiedTimerRef.current = window.setTimeout(() => setCopied(false), 1600);
+        } catch (error) {
+            console.error('코드 복사 실패:', error);
         }
     };
 
-    if (language === 'mermaid') {
-        return (
-            <div className="group relative my-4">
-                <button
-                    type="button"
-                    onClick={handleCopy}
-                    className="absolute right-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-500/40 bg-gray-700/80 text-gray-100 backdrop-blur transition-opacity duration-150 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 hover:bg-gray-600 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                    aria-label={copied ? '코드 복사 완료' : '코드 복사'}
-                    title={copied ? '복사됨' : '코드 복사'}
-                >
-                    {copied ? (
-                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.414l-7.2 7.2a1 1 0 01-1.415 0l-3.2-3.2a1 1 0 111.414-1.414l2.493 2.493 6.493-6.493a1 1 0 011.415 0z" clipRule="evenodd" />
-                        </svg>
-                    ) : (
-                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path d="M6 2a2 2 0 00-2 2v1H3a2 2 0 00-2 2v8a2 2 0 002 2h7a2 2 0 002-2v-1h1a2 2 0 002-2V7.414a2 2 0 00-.586-1.414l-3.414-3.414A2 2 0 0010.586 2H6zm5 2.414L13.586 7H11V4.414zM10 4v4a1 1 0 001 1h3v6h-2V7a2 2 0 00-2-2H6V4h4z" />
-                        </svg>
-                    )}
-                </button>
-                {language ? <FenceLanguageLabel language={language} /> : null}
-                <InCodeFenceContext.Provider value={true}>
-                    <div className="pr-14 pt-7">
-                        <MermaidDiagram code={codeText} />
-                    </div>
-                </InCodeFenceContext.Provider>
-            </div>
-        );
-    }
-
     return (
-        <div className="group relative my-4">
-            <button
-                type="button"
-                onClick={handleCopy}
-                className="absolute right-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-500/40 bg-gray-700/80 text-gray-100 backdrop-blur transition-opacity duration-150 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 hover:bg-gray-600 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                aria-label={copied ? '코드 복사 완료' : '코드 복사'}
-                title={copied ? '복사됨' : '코드 복사'}
-            >
-                {copied ? (
-                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.414l-7.2 7.2a1 1 0 01-1.415 0l-3.2-3.2a1 1 0 111.414-1.414l2.493 2.493 6.493-6.493a1 1 0 011.415 0z" clipRule="evenodd" />
-                    </svg>
-                ) : (
-                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path d="M6 2a2 2 0 00-2 2v1H3a2 2 0 00-2 2v8a2 2 0 002 2h7a2 2 0 002-2v-1h1a2 2 0 002-2V7.414a2 2 0 00-.586-1.414l-3.414-3.414A2 2 0 0010.586 2H6zm5 2.414L13.586 7H11V4.414zM10 4v4a1 1 0 001 1h3v6h-2V7a2 2 0 00-2-2H6V4h4z" />
-                    </svg>
-                )}
-            </button>
-            {language ? <FenceLanguageLabel language={language} /> : null}
+        <div className="code-block relative my-6 overflow-hidden rounded-xl border border-slate-700/80 bg-[#111827] shadow-[0_14px_34px_-22px_rgba(15,23,42,0.85)] ring-1 ring-black/5 dark:shadow-black/30">
+            <div className="absolute inset-x-0 top-0 z-10 h-px bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent" aria-hidden="true" />
+            <CodeBlockHeader language={language} copied={copied} onCopy={handleCopy} />
             <InCodeFenceContext.Provider value={true}>
-                <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 rounded-lg overflow-x-auto pt-7 px-4 pr-16 pb-4">
-                    {children}
-                </pre>
+                {language === 'mermaid' ? (
+                    <MermaidDiagram code={codeText} />
+                ) : (
+                    <pre className="m-0 overflow-x-auto bg-[#111827] px-5 py-5 font-mono text-[13px] leading-6 text-slate-200 sm:px-6 sm:text-sm">
+                        {children}
+                    </pre>
+                )}
             </InCodeFenceContext.Provider>
         </div>
     );
