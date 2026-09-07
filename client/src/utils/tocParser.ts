@@ -1,3 +1,6 @@
+import { isValidElement } from 'react';
+import type { ReactNode } from 'react';
+
 export interface TocItem {
     id: string;
     text: string;
@@ -36,14 +39,14 @@ export function generateSlug(text: string, slugCount: Map<string, number>): stri
  * React children에서 순수 텍스트를 추출
  * ReactMarkdown이 넘겨주는 children (string | ReactNode[])를 처리
  */
-export function extractTextFromChildren(children: React.ReactNode): string {
+export function extractTextFromChildren(children: ReactNode): string {
     if (typeof children === 'string') return children;
     if (typeof children === 'number') return String(children);
     if (Array.isArray(children)) {
         return children.map(extractTextFromChildren).join('');
     }
-    if (children && typeof children === 'object' && 'props' in children) {
-        return extractTextFromChildren((children as any).props.children);
+    if (isValidElement<{ children?: ReactNode }>(children)) {
+        return extractTextFromChildren(children.props.children);
     }
     return '';
 }

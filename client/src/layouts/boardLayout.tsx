@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import { ContentCard } from "../components";
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import api from '../utils/api';
 
 interface PostItem {
@@ -39,13 +40,13 @@ const BoardLayout: React.FC = () => {
                     signal: controller.signal,
                 });
                 setPosts(response.data.items);
-            } catch (err: any) {
-                if (err?.name !== 'CanceledError') {
-                    console.error('게시글 로드 실패:', err);
+            } catch (error: unknown) {
+                if (!axios.isCancel(error)) {
+                    console.error('게시글 로드 실패:', error);
                     setError('게시글을 불러오는데 실패했습니다.');
                 }
             } finally {
-                setLoading(false);
+                if (!controller.signal.aborted) setLoading(false);
             }
         };
 

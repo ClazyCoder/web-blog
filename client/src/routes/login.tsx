@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import axios from 'axios';
+import { useAuth } from '../context/useAuth';
+
+interface LoginLocationState {
+    from?: { pathname?: string };
+}
 
 const Login: React.FC = () => {
     const [username, setUsername] = useState('');
@@ -14,7 +19,7 @@ const Login: React.FC = () => {
     const location = useLocation();
 
     // 이전 페이지 경로를 가져옵니다 (없으면 홈으로)
-    const from = (location.state as any)?.from?.pathname || '/';
+    const from = (location.state as LoginLocationState | null)?.from?.pathname || '/';
 
     // 이미 로그인된 경우 리다이렉트
     useEffect(() => {
@@ -43,18 +48,19 @@ const Login: React.FC = () => {
             } else {
                 setError('로그인에 실패했습니다. 사용자명과 비밀번호를 확인해주세요.');
             }
-        } catch (err: any) {
+        } catch (error: unknown) {
             // XSS 방지: 서버 에러 메시지를 직접 사용하지 않고 안전한 메시지 매핑
-            if (err.response?.status === 401) {
+            const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+            if (status === 401) {
                 setError('사용자명 또는 비밀번호가 올바르지 않습니다.');
-            } else if (err.response?.status === 400) {
+            } else if (status === 400) {
                 setError('잘못된 요청입니다. 입력 정보를 확인해주세요.');
-            } else if (err.response?.status >= 500) {
+            } else if (status && status >= 500) {
                 setError('서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
             } else {
                 setError('로그인 중 오류가 발생했습니다.');
             }
-            console.error('Login error:', err);
+            console.error('Login error:', error);
         } finally {
             setIsLoading(false);
         }

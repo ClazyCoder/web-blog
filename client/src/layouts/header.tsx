@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/useAuth';
 import { confirmNavigation } from '../utils/navigationGuard';
 import ThemeToggle from '../components/ThemeToggle';
 
@@ -10,14 +10,7 @@ const Header: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const navigate = useNavigate();
-    const location = useLocation();
     const userMenuRef = useRef<HTMLDivElement>(null);
-
-    // 라우트 변경 시 메뉴 닫기
-    useEffect(() => {
-        setIsMobileMenuOpen(false);
-        setShowUserMenu(false);
-    }, [location.pathname]);
 
     // 스크롤 시 헤더 배경 강화
     useEffect(() => {
@@ -42,7 +35,10 @@ const Header: React.FC = () => {
     const handleNavClick = (e: React.MouseEvent) => {
         if (!confirmNavigation()) {
             e.preventDefault();
+            return;
         }
+        setIsMobileMenuOpen(false);
+        setShowUserMenu(false);
     };
 
     const handleLogout = () => {
