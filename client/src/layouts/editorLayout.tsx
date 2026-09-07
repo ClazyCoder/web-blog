@@ -12,7 +12,8 @@ import 'highlight.js/styles/github-dark-dimmed.css';
 import { useAuth } from '../context/AuthContext';
 import { setNavigationGuard, clearNavigationGuard } from '../utils/navigationGuard';
 import { UnauthorizedAccess, EditorSidebar } from '../components';
-import MarkdownCodeBlock, { InCodeFenceContext } from '../components/MarkdownCodeBlock';
+import MarkdownCodeBlock from '../components/MarkdownCodeBlock';
+import { InCodeFenceContext } from '../context/codeFenceContext';
 import api from '../utils/api';
 
 interface EditorData {
@@ -1370,13 +1371,11 @@ const EditorLayout: React.FC = () => {
                 .toolbar-btn:hover {
                     background-color: rgb(243, 244, 246);
                 }
-                @media (prefers-color-scheme: dark) {
-                    .toolbar-btn {
+                .dark .toolbar-btn {
                         color: rgb(209, 213, 219);
-                    }
-                    .toolbar-btn:hover {
+                }
+                .dark .toolbar-btn:hover {
                         background-color: rgb(55, 65, 81);
-                    }
                 }
                 /* 모바일에서 에디터/미리보기 영역 전체 너비 강제 */
                 @media (max-width: 1023px) {

@@ -14,7 +14,8 @@ import api from '../utils/api';
 import { parseMarkdownHeadings, extractTextFromChildren, slugifyHeadingText } from '../utils/tocParser';
 import type { TocItem } from '../utils/tocParser';
 import TableOfContents from '../components/TableOfContents';
-import MarkdownCodeBlock, { InCodeFenceContext } from '../components/MarkdownCodeBlock';
+import MarkdownCodeBlock from '../components/MarkdownCodeBlock';
+import { InCodeFenceContext } from '../context/codeFenceContext';
 
 interface PostData {
     id: number;

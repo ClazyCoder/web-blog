@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 html {
   scroll-padding-top: 5rem; /* 헤더 높이 고려, hash 링크 스크롤 시 오프셋 */
@@ -43,7 +44,7 @@ html {
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
 
-@media (prefers-color-scheme: dark) {
+.dark {
   .skeleton-shimmer {
     background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
     background-size: 200% 100%;
@@ -80,15 +81,8 @@ code {
   overflow-y: hidden;
 }
 
-/* 다크모드 활성화 */
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-  }
-}
-
 /* Markdown 콘텐츠 다크모드 스타일 */
-@media (prefers-color-scheme: dark) {
+.dark {
   .markdown-content {
     color: #e5e7eb;
   }
@@ -145,4 +139,31 @@ code {
     color: #e5e7eb;
   }
 
+}
+
+/* 코드 패널: 본문 테마와 분리된 읽기 전용 작업창 */
+.code-block pre {
+  scrollbar-color: #475569 #111827;
+  scrollbar-width: thin;
+}
+
+.code-block pre::-webkit-scrollbar {
+  height: 10px;
+}
+
+.code-block pre::-webkit-scrollbar-track {
+  background: #111827;
+}
+
+.code-block pre::-webkit-scrollbar-thumb {
+  background: #475569;
+  border: 3px solid #111827;
+  border-radius: 999px;
+}
+
+.code-block code.hljs {
+  display: block;
+  overflow: visible;
+  padding: 0;
+  background: transparent;
 }
