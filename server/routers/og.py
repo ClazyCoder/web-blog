@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from db.session import get_db
 from models.post import Post
+from rate_limit import limiter
 
 router = APIRouter(
     prefix="/og",
@@ -99,6 +100,7 @@ def _render_og_html(
 
 
 @router.get("/board/{post_id}", response_class=HTMLResponse)
+@limiter.limit("60/minute")
 async def get_og_page(
     request: Request,
     post_id: int,
@@ -113,7 +115,7 @@ async def get_og_page(
     stmt = (
         select(Post)
         .options(selectinload(Post.images))
-        .filter(Post.id == post_id, Post.deleted_at.is_(None))
+        .filter(Post.id == post_id, *Post.public_conditions())
     )
     result = await db.execute(stmt)
     post = result.scalar_one_or_none()

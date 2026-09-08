@@ -31,8 +31,16 @@ RUN npm run build
 # ============================================
 FROM nginxinc/nginx-unprivileged:alpine
 
-# nginx 설정 및 빌드 결과물 복사
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+USER root
+RUN apk add --no-cache iproute2
+USER nginx
+
+# nginx 설정 및 런타임 trusted proxy 탐지 스크립트
+COPY nginx.conf /etc/nginx/templates/default.conf.template
+COPY --chmod=755 docker/05-cf-trusted-proxy.envsh /docker-entrypoint.d/05-cf-trusted-proxy.envsh
+ENV CF_TRUSTED_PROXY="unix:"
+
+# 빌드 결과물 복사
 COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 
 EXPOSE 8080

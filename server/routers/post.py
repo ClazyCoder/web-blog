@@ -7,13 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import cast, desc, func, or_, select, String
 from sqlalchemy.orm import selectinload
 from typing import Optional, List
-import json
 import logging
 import re
+import os
+from html.parser import HTMLParser
+from urllib.parse import urlsplit, unquote
 from collections import Counter
 from datetime import datetime
 from db.session import get_db
-from db.redis import cache_get, cache_set, cache_delete_pattern, check_and_set_view
+from db.redis import check_and_set_view
 from models.post import Post
 from models.image import Image
 from auth import get_current_user, get_current_user_optional
@@ -33,15 +35,30 @@ def extract_image_urls(content: str) -> List[str]:
     """마크다운 본문에서 모든 이미지 URL 추출"""
     if not content:
         return []
-    return re.findall(r'!\[.*?\]\((.*?)\)', content)
+    urls = re.findall(r'!\[.*?\]\(\s*<?([^\s>]+?)>?(?:\s+["\'][^\n]*?["\'])?\s*\)', content)
+
+    class InlineImages(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            if tag == "img":
+                src = dict(attrs).get("src")
+                if src:
+                    urls.append(src)
+
+    InlineImages().feed(content)
+    return urls
 
 
 def extract_storage_keys_from_urls(urls: List[str]) -> List[str]:
     """이미지 URL에서 storage_key 추출 (예: .../uploads/images/xxx.jpg → images/xxx.jpg)"""
     keys = []
     for url in urls:
-        # /uploads/images/xxx.jpg 또는 http://host/uploads/images/xxx.jpg
-        match = re.search(r'uploads/(images/[^)\s]+)', url)
+        parsed = urlsplit(url)
+        allowed_hosts = {urlsplit(base).netloc for base in (
+            os.getenv("SITE_URL", ""), os.getenv("BASE_URL", "http://localhost:8000"),
+        ) if base}
+        if parsed.netloc and parsed.netloc not in allowed_hosts:
+            continue
+        match = re.fullmatch(r'/uploads/(images/[A-Za-z0-9_.-]+)', unquote(parsed.path))
         if match:
             keys.append(match.group(1))
     return keys
@@ -80,9 +97,11 @@ async def link_images_to_post(post_id: int, content: str, db: AsyncSession):
         stmt = select(Image).where(
             Image.storage_key.in_(list(new_keys)),
             Image.deleted_at.is_(None),
-        )
+        ).with_for_update()
         result = await db.execute(stmt)
         new_images = result.scalars().all()
+        if any(img.post_id not in (None, post_id) for img in new_images):
+            raise HTTPException(409, "Image belongs to another post; upload a separate copy")
         for img in new_images:
             img.post_id = post_id
             img.is_temporary = False
@@ -129,23 +148,16 @@ async def increment_view_count(
         post_id: 게시글 ID
         db: 비동기 데이터베이스 세션
     """
-    # IP 기반 중복 조회 방지 (1시간 TTL)
-    client_ip = get_client_ip(request)
-    is_new_view = await check_and_set_view(post_id, client_ip, ttl=3600)
-
-    if not is_new_view:
-        return  # 중복 조회: DB 업데이트 없이 204 반환
-
-    stmt = select(Post).filter(Post.id == post_id, Post.deleted_at.is_(None))
+    stmt = select(Post).where(Post.id == post_id, *Post.public_conditions()).with_for_update()
     result = await db.execute(stmt)
     post = result.scalar_one_or_none()
-    
     if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="게시글을 찾을 수 없습니다"
-        )
-    
+        raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다")
+
+    client_ip = get_client_ip(request)
+    if not await check_and_set_view(post_id, client_ip, ttl=3600):
+        return
+
     post.view_count += 1
     await db.commit()
 
@@ -199,8 +211,6 @@ async def create_post(
         
         await db.commit()
 
-        # 캐시 무효화 (목록, 태그)
-        await cache_delete_pattern("cache:posts:*")
         
         # 연결된 첫 번째 이미지의 URL을 썸네일로 사용
         thumbnail_url = None
@@ -227,6 +237,9 @@ async def create_post(
             deleted_at=None,
         )
         
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception:
         await db.rollback()
         logger.exception("게시글 생성 실패")
@@ -237,7 +250,9 @@ async def create_post(
 
 
 @router.get("", response_model=PaginatedPostResponse)
+@limiter.limit("60/minute")
 async def get_posts(
+    request: Request,
     skip: int = Query(0, ge=0, description="건너뛸 개수"),
     limit: int = Query(20, ge=1, le=100, description="가져올 개수"),
     category_slug: Optional[str] = Query(None, description="카테고리 필터"),
@@ -250,24 +265,13 @@ async def get_posts(
 ):
     """
     게시글 목록 조회 (페이지네이션 + 총 개수)
-    검색어가 없는 경우 Redis 캐시 활용 (TTL 5분)
+    익명 사용자는 공개 발행글만 조회
     """
-    # 검색어가 없으면 캐시 시도
-    use_cache = search is None
-    visibility_scope = "auth" if current_user else "public"
-    cache_key = ""
-    cache_secret_scope = "secret" if (current_user and secret_only) else "all"
-    if use_cache:
-        cache_key = f"cache:posts:list:{visibility_scope}:{cache_secret_scope}:{post_status or 'all'}:{category_slug or 'none'}:{tags or 'none'}:{skip}:{limit}"
-        cached = await cache_get(cache_key)
-        if cached:
-            return PaginatedPostResponse(**json.loads(cached))
-
     try:
         # WHERE 조건 리스트
         conditions = [Post.deleted_at.is_(None)]
         if not current_user:
-            conditions.append(Post.is_secret.is_(False))
+            conditions.extend(Post.public_conditions())
         elif secret_only:
             conditions.append(Post.is_secret.is_(True))
         
@@ -317,10 +321,6 @@ async def get_posts(
             limit=limit
         )
 
-        # 캐시 저장 (검색어 없는 경우만, TTL 5분)
-        if use_cache:
-            await cache_set(cache_key, response_data.model_dump_json(), ttl=300)
-
         return response_data
         
     except Exception:
@@ -332,14 +332,16 @@ async def get_posts(
 
 
 @router.get("/tags")
+@limiter.limit("60/minute")
 async def get_all_tags(
+    request: Request,
     secret_only: bool = Query(False, description="비밀글 태그만 조회 (로그인 사용자 전용)"),
     current_user: Optional[dict] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
     모든 published 게시글의 고유 태그 목록 반환 (정렬됨)
-    Redis 캐시 활용 (TTL 10분)
+    현재 DB 공개 범위를 적용
     
     Returns:
         {
@@ -347,14 +349,6 @@ async def get_all_tags(
             "tag_counts": [{"tag": "python", "count": 12}, ...]
         }
     """
-    # 캐시 시도
-    visibility_scope = "auth" if current_user else "public"
-    cache_secret_scope = "secret" if (current_user and secret_only) else "all"
-    cache_key = f"cache:posts:tags:{visibility_scope}:{cache_secret_scope}"
-    cached = await cache_get(cache_key)
-    if cached:
-        return json.loads(cached)
-
     try:
         stmt = select(Post.tags).where(
             Post.deleted_at.is_(None),
@@ -362,7 +356,7 @@ async def get_all_tags(
             Post.tags.isnot(None),
         )
         if not current_user:
-            stmt = stmt.where(Post.is_secret.is_(False))
+            stmt = stmt.where(*Post.public_conditions())
         elif secret_only:
             stmt = stmt.where(Post.is_secret.is_(True))
         result = await db.execute(stmt)
@@ -383,9 +377,6 @@ async def get_all_tags(
             ]
         }
 
-        # 캐시 저장 (TTL 10분)
-        await cache_set(cache_key, json.dumps(response_data, ensure_ascii=False), ttl=600)
-
         return response_data
         
     except Exception:
@@ -397,21 +388,16 @@ async def get_all_tags(
 
 
 @router.get("/{post_id}", response_model=PostResponse)
+@limiter.limit("60/minute")
 async def get_post(
+    request: Request,
     post_id: int,
     current_user: Optional[dict] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    게시글 상세 조회 (Redis 캐시 활용, TTL 10분)
+    게시글 상세 조회 (현재 DB 공개 범위 적용)
     """
-    # 캐시 시도
-    visibility_scope = "auth" if current_user else "public"
-    cache_key = f"cache:posts:detail:{visibility_scope}:{post_id}"
-    cached = await cache_get(cache_key)
-    if cached:
-        return PostResponse(**json.loads(cached))
-
     stmt = (
         select(Post)
         .options(selectinload(Post.images))
@@ -425,7 +411,7 @@ async def get_post(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="게시글을 찾을 수 없습니다"
         )
-    if not current_user and post.is_secret:
+    if not current_user and not post.is_public:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="게시글을 찾을 수 없습니다"
@@ -433,9 +419,6 @@ async def get_post(
     
     response = PostResponse(**post.to_dict())
 
-    # published 게시글만 캐시 (draft는 자주 변경됨)
-    if post.status == "published":
-        await cache_set(cache_key, response.model_dump_json(), ttl=600)
 
     return response
 
@@ -498,11 +481,12 @@ async def update_post(
         await db.refresh(post)  # 모든 scalar 속성 refresh
         await db.refresh(post, attribute_names=["images"])  # images 관계 refresh
 
-        # 캐시 무효화 (목록, 태그, 개별 게시글)
-        await cache_delete_pattern("cache:posts:*")
         
         return PostResponse(**post.to_dict())
         
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception:
         await db.rollback()
         logger.exception("게시글 수정 실패")
@@ -560,9 +544,10 @@ async def delete_post(
         
         await db.commit()
 
-        # 캐시 무효화
-        await cache_delete_pattern("cache:posts:*")
         
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception:
         await db.rollback()
         logger.exception("게시글 삭제 실패")
@@ -573,21 +558,16 @@ async def delete_post(
 
 
 @router.get("/slug/{slug}", response_model=PostResponse)
+@limiter.limit("60/minute")
 async def get_post_by_slug(
+    request: Request,
     slug: str,
     current_user: Optional[dict] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    슬러그로 게시글 조회 (Redis 캐시 활용, TTL 10분)
+    슬러그로 게시글 조회 (현재 DB 공개 범위 적용)
     """
-    # 캐시 시도
-    visibility_scope = "auth" if current_user else "public"
-    cache_key = f"cache:posts:slug:{visibility_scope}:{slug}"
-    cached = await cache_get(cache_key)
-    if cached:
-        return PostResponse(**json.loads(cached))
-
     stmt = (
         select(Post)
         .options(selectinload(Post.images))
@@ -601,7 +581,7 @@ async def get_post_by_slug(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="게시글을 찾을 수 없습니다"
         )
-    if not current_user and post.is_secret:
+    if not current_user and not post.is_public:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="게시글을 찾을 수 없습니다"
@@ -609,7 +589,5 @@ async def get_post_by_slug(
     
     response = PostResponse(**post.to_dict())
 
-    if post.status == "published":
-        await cache_set(cache_key, response.model_dump_json(), ttl=600)
 
     return response

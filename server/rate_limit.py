@@ -1,47 +1,42 @@
-"""
-Rate Limiter 공유 인스턴스 & 클라이언트 IP 유틸리티
-
-모든 라우터에서 동일한 limiter를 사용하여
-Redis 백엔드 (또는 인메모리 폴백) 공유
-
-CF Tunnel → Nginx → Uvicorn 구조에서 실제 클라이언트 IP를 추출하는
-get_client_ip 함수 제공
-"""
+"""Shared request limits. Only the configured nginx peer may supply X-Real-IP."""
 
 import os
+import socket
+from ipaddress import ip_address
 from starlette.requests import Request
 from slowapi import Limiter
 
-# REDIS_URL이 설정되어 있으면 Redis 백엔드 사용, 없으면 인메모리
 REDIS_URL = os.getenv("REDIS_URL")
 
 
+def is_trusted_proxy(request: Request) -> bool:
+    peer = request.client.host if request.client else None
+    proxy_host = os.getenv("TRUSTED_PROXY_HOST", "")
+    if not peer or not proxy_host:
+        return False
+    try:
+        # Resolve the Docker service on each request: its IP can change on recreation.
+        addresses = {item[4][0] for item in socket.getaddrinfo(proxy_host, None)}
+        return peer in addresses
+    except OSError:
+        return False
+
+
 def get_client_ip(request: Request) -> str:
-    """
-    실제 클라이언트 IP 추출 (CF Tunnel / 일반 Docker Compose 환경 모두 호환)
-
-    Nginx가 proxy_set_header X-Real-IP $remote_addr 로 설정하므로:
-      - CF Tunnel 환경: set_real_ip_from + real_ip_header 에 의해
-        $remote_addr 이 이미 실제 클라이언트 IP 로 복원됨
-      - 일반 Docker Compose 환경: $remote_addr 이 원래 클라이언트 IP
-
-    X-Real-IP 는 Nginx 가 $remote_addr 로 항상 덮어쓰므로
-    클라이언트가 위조할 수 없어 안전함
-    """
-    # Nginx가 설정한 X-Real-IP (클라이언트 위조 불가)
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip
-
-    # 폴백: Uvicorn이 해석한 클라이언트 IP
-    if request.client:
-        return request.client.host
-
-    return "unknown"
+    if is_trusted_proxy(request):
+        try:
+            return str(ip_address(request.headers.get("X-Real-IP", "")))
+        except ValueError:
+            pass
+    return request.client.host if request.client else "unknown"
 
 
 limiter = Limiter(
     key_func=get_client_ip,
     default_limits=["60/minute"],
-    storage_uri=REDIS_URL,  # None이면 인메모리 폴백
+    storage_uri=REDIS_URL,
 )
+
+# FastAPI's included routers are not discovered by SlowAPI 0.1.x middleware.
+# Keep explicit limit decorators on API handlers. Logout is exempt so it can
+# clear cookies and report a revocation-store failure even during a Redis outage.

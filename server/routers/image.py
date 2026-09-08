@@ -3,6 +3,7 @@
 """
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from pathlib import Path
@@ -11,11 +12,13 @@ from datetime import datetime
 import re
 from io import BytesIO
 import logging
+import warnings
 from PIL import Image as PILImage, ImageOps
 import os
-from auth import get_current_user
+from auth import get_current_user, get_current_user_optional
 from db.session import get_db
 from models.image import Image
+from models.post import Post
 from services.image_cleanup import run_cleanup, ORPHAN_TTL_HOURS, SOFT_DELETE_TTL_DAYS
 from rate_limit import limiter
 
@@ -25,6 +28,7 @@ router = APIRouter(
     prefix="/api/upload",
     tags=["image"]
 )
+files_router = APIRouter(tags=["image"])
 
 # 업로드 디렉토리 설정
 UPLOAD_DIR = Path("uploads/images")
@@ -35,6 +39,44 @@ ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 # 최대 파일 크기 (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024
+MAX_IMAGE_PIXELS = 25_000_000
+IMAGE_FORMATS = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG",
+                 ".gif": "GIF", ".webp": "WEBP"}
+
+
+async def visible_image(filename: str, current_user: dict | None, db: AsyncSession) -> Image:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", filename):
+        raise HTTPException(404, "Image not found")
+    stmt = select(Image).where(
+        Image.storage_key == f"images/{filename}", Image.deleted_at.is_(None),
+    )
+    if not current_user:
+        stmt = stmt.join(Post).where(*Post.public_conditions(), Image.is_temporary.is_(False))
+    image = (await db.execute(stmt)).scalar_one_or_none()
+    if image is None:
+        raise HTTPException(404, "Image not found")
+    return image
+
+
+@files_router.api_route("/uploads/images/{filename}", methods=["GET", "HEAD"])
+@limiter.limit("60/minute")
+async def get_image_file(
+    request: Request,
+    filename: str,
+    current_user: dict | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    image = await visible_image(filename, current_user, db)
+    file_path = (UPLOAD_DIR / image.filename).resolve()
+    if not file_path.is_relative_to(UPLOAD_DIR.resolve()) or not file_path.is_file():
+        raise HTTPException(404, "Image not found")
+    # Never trust a client-supplied content type stored by older upload versions.
+    media_type = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+                  ".gif": "image/gif", ".webp": "image/webp"}.get(file_path.suffix.lower())
+    if not media_type:
+        raise HTTPException(404, "Image not found")
+    return FileResponse(file_path, media_type=media_type,
+                        headers={"Cache-Control": "private, no-store"})
 
 # 이미지 최적화 설정
 MAX_IMAGE_DIMENSION = 1920  # 최대 너비/높이 (픽셀)
@@ -210,6 +252,7 @@ async def upload_image(
             detail="Invalid image file. Allowed formats: jpg, jpeg, png, gif, webp"
         )
 
+    file_path = None
     try:
         # 파일 크기 체크 (스트리밍 방식, 메모리 보호)
         chunks = []
@@ -229,8 +272,14 @@ async def upload_image(
         content = b"".join(chunks)
         # 실제 이미지 포맷 검증 (magic bytes)
         try:
-            with PILImage.open(BytesIO(content[:512])) as probe:
-                probe.verify()
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", PILImage.DecompressionBombWarning)
+                with PILImage.open(BytesIO(content)) as probe:
+                    if (probe.format != IMAGE_FORMATS[Path(file.filename).suffix.lower()]
+                            or probe.width * probe.height > MAX_IMAGE_PIXELS):
+                        raise ValueError("Unsupported image format or dimensions")
+                    detected_mime = PILImage.MIME[probe.format]
+                    probe.verify()
         except Exception:
             raise HTTPException(
                 status_code=400,
@@ -256,7 +305,7 @@ async def upload_image(
             storage_key=storage_key,  # 실제 저장 경로
             original_filename=file.filename or "image.jpg",
             file_size=file_size,
-            mime_type=file.content_type,
+            mime_type=detected_mime,
             width=width,
             height=height,
             is_temporary=True,  # 게시글에 연결되지 않은 임시 이미지
@@ -298,30 +347,26 @@ async def upload_image(
 
 
 @router.get("/temp/{filename}")
+@limiter.limit("60/minute")
 async def get_temp_image_info(
+    request: Request,
     filename: str,
+    current_user: dict | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
     임시 이미지 정보 조회 (파일명으로)
     """
-    # DB에서 이미지 정보 조회 (storage_key 정확 매칭)
-    stmt = select(Image).filter(
-        Image.storage_key == f"images/{filename}",
-        Image.deleted_at.is_(None)
-    )
-    result = await db.execute(stmt)
-    image = result.scalar_one_or_none()
-
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found")
+    image = await visible_image(filename, current_user, db)
 
     base_url = os.getenv("BASE_URL", "http://localhost:8000")
     return image.to_dict(base_url)
 
 
 @router.delete("/image/{filename}")
+@limiter.limit("60/minute")
 async def delete_image(
+    request: Request,
     filename: str,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -369,7 +414,9 @@ async def delete_image(
 # ==================== 관리 엔드포인트 ====================
 
 @router.get("/admin/orphans")
+@limiter.limit("60/minute")
 async def get_orphan_stats(
+    request: Request,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -439,7 +486,9 @@ async def get_orphan_stats(
 
 
 @router.get("/admin/orphans/list")
+@limiter.limit("60/minute")
 async def get_orphan_list(
+    request: Request,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -470,7 +519,9 @@ async def get_orphan_list(
 
 
 @router.post("/admin/cleanup")
+@limiter.limit("60/minute")
 async def trigger_cleanup(
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     """

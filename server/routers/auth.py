@@ -5,6 +5,7 @@
 from typing import Optional
 from fastapi import APIRouter, HTTPException, status, Depends, Response, Request, Cookie
 from datetime import timedelta
+from fastapi.responses import JSONResponse
 from auth import (
     create_access_token,
     create_refresh_token,
@@ -14,9 +15,10 @@ from auth import (
     get_admin_user,
     ACCESS_TOKEN_EXPIRE_MINUTES,
     REFRESH_TOKEN_EXPIRE_DAYS,
-    get_current_user
+    get_current_user,
+    token_remaining_seconds,
 )
-from db.redis import blacklist_token
+from db.redis import blacklist_token, consume_refresh_token, require_auth_store
 from schemas.auth import UserLogin, UserInfo
 from rate_limit import limiter
 
@@ -59,6 +61,9 @@ def _set_auth_cookies(
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
+    if not remember_me:
+        response.delete_cookie("refresh_token", path="/api/auth", secure=True,
+                               httponly=True, samesite="lax")
     if remember_me:
         # 리프레시 토큰 생성 및 쿠키 설정 (장기 유효)
         refresh_token = create_refresh_token(
@@ -89,6 +94,7 @@ async def login(request: Request, user_data: UserLogin, response: Response):
     Returns:
         성공 메시지
     """
+    await require_auth_store()
     # 환경변수의 관리자 자격증명 검증
     if not verify_admin_credentials(user_data.username, user_data.password):
         raise HTTPException(
@@ -133,25 +139,8 @@ async def refresh(
     # 리프레시 토큰 검증
     payload = decode_refresh_token(refresh_token)
 
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token",
-        )
-
-    # 블랙리스트 확인 (이미 사용된 리프레시 토큰 차단)
-    from db.redis import is_token_blacklisted
-    old_jti = payload.get("jti")
-    if old_jti and await is_token_blacklisted(old_jti):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token has been revoked",
-        )
-
-    # 이전 리프레시 토큰을 블랙리스트에 등록 (Rotation 보안)
-    if old_jti:
-        await blacklist_token(old_jti, REFRESH_TOKEN_EXPIRE_DAYS * 86400)
+    if not await consume_refresh_token(payload["jti"], token_remaining_seconds(payload)):
+        raise HTTPException(401, "Refresh token has been revoked")
 
     # 관리자 정보를 다시 가져와서 새 토큰 쌍 발급
     admin = get_admin_user()
@@ -163,7 +152,8 @@ async def refresh(
 
 
 @router.get("/me", response_model=UserInfo)
-async def get_me(current_user: dict = Depends(get_current_user)):
+@limiter.limit("60/minute")
+async def get_me(request: Request, current_user: dict = Depends(get_current_user)):
     """
     현재 로그인한 사용자 정보 조회 (HttpOnly 쿠키 기반)
 
@@ -178,6 +168,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 
 
 @router.post("/logout")
+@limiter.exempt
 async def logout(
     response: Response,
     access_token: Optional[str] = Cookie(None, alias="access_token"),
@@ -194,40 +185,23 @@ async def logout(
     Returns:
         성공 메시지
     """
-    # 액세스 토큰 블랙리스트 등록 (만료 여부 무관하게 jti 추출)
-    if access_token:
-        payload = decode_token_unsafe(access_token)
-        if payload and payload.get("jti"):
-            await blacklist_token(
-                payload["jti"], ACCESS_TOKEN_EXPIRE_MINUTES * 60
-            )
+    failure = False
+    for token in (access_token, refresh_token):
+        if not token:
+            continue
+        payload = decode_token_unsafe(token)
+        if payload:
+            try:
+                await blacklist_token(payload["jti"], token_remaining_seconds(payload))
+            except HTTPException:
+                failure = True
 
-    # 리프레시 토큰 블랙리스트 등록
-    if refresh_token:
-        payload = decode_token_unsafe(refresh_token)
-        if payload and payload.get("jti"):
-            await blacklist_token(
-                payload["jti"], REFRESH_TOKEN_EXPIRE_DAYS * 86400
-            )
-
-    # 액세스 토큰 쿠키 삭제
-    response.set_cookie(
-        key="access_token",
-        value="",
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=0,
+    # Return the actual response so cookie deletion also reaches the browser on 503.
+    result = JSONResponse(
+        {"detail": "Server-side logout failed; authentication store unavailable"}
+        if failure else {"message": "Logout successful"},
+        status_code=503 if failure else 200,
     )
-    # 리프레시 토큰 쿠키 삭제
-    response.set_cookie(
-        key="refresh_token",
-        value="",
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=0,
-        path="/api/auth",
-    )
-
-    return {"message": "Logout successful"}
+    for key, path in (("access_token", "/"), ("refresh_token", "/api/auth")):
+        result.delete_cookie(key, path=path, secure=True, httponly=True, samesite="lax")
+    return result

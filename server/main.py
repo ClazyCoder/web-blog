@@ -6,15 +6,18 @@ FastAPI 기반 블로그 서버
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from redis.exceptions import RedisError
+from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from pathlib import Path
+from slowapi.middleware import SlowAPIMiddleware
+from dotenv import load_dotenv
 import os
 import uvicorn
+
+load_dotenv()
 
 # 라우터 임포트
 from routers import image, auth as auth_router, post, og
@@ -28,6 +31,7 @@ from db.redis import init_redis, close_redis
 
 # 공유 Rate Limiter
 from rate_limit import limiter
+from security import allowed_origins, security_headers_and_origin
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +44,7 @@ async def lifespan(app: FastAPI):
     redis_url = os.getenv("REDIS_URL")
     if redis_url:
         await init_redis(redis_url)
+    auth.init_admin_user()
 
     # Startup: 백그라운드 태스크 시작
     cleanup_task = asyncio.create_task(start_cleanup_scheduler())
@@ -72,29 +77,30 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS 설정 (환경 변수로 오리진 관리)
-cors_origins = os.getenv(
-    "CORS_ORIGINS",
-    "http://localhost:5173,http://localhost:3000"
-).split(",")
+
+def redis_unavailable_handler(request, exc):
+    # SlowAPI and authentication both fail closed, without leaking connection details.
+    return JSONResponse({"detail": "Service temporarily unavailable"}, status_code=503)
+
+
+app.add_exception_handler(RedisError, redis_unavailable_handler)
+app.add_middleware(SlowAPIMiddleware)
+app.state.allowed_origins = allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in cors_origins],
+    allow_origins=list(app.state.allowed_origins),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
-# 정적 파일 서빙 (업로드된 이미지)
-uploads_dir = Path("uploads")
-uploads_dir.mkdir(exist_ok=True)
-
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.middleware("http")(security_headers_and_origin)
 
 # 라우터 등록
 app.include_router(auth_router.router)
 app.include_router(image.router)
+app.include_router(image.files_router)
 app.include_router(post.router)
 app.include_router(og.router)
 

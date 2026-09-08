@@ -27,7 +27,9 @@ services:
     command: >
       redis-server
       --maxmemory 128mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy noeviction
+      --appendonly yes
+      --appendfsync always
       --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes:
       - redisdata:/data
@@ -61,6 +63,7 @@ services:
       DB_NAME: ${POSTGRES_DB:-blog_db}
       # Redis
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      TRUSTED_PROXY_HOST: client
       # 인증
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       ADMIN_USERNAME: ${ADMIN_USERNAME:?ADMIN_USERNAME is required}
@@ -69,7 +72,7 @@ services:
       # 이미지 URL (빈 문자열 = 상대 경로, nginx 프록시 사용)
       BASE_URL: ""
       # Open Graph 메타태그용 사이트 정보
-      SITE_URL: ${SITE_URL:-}
+      SITE_URL: ${SITE_URL:?SITE_URL is required (public origin, e.g. https://blog.example.com)}
       SITE_NAME: ${SITE_NAME:-YSG Blog}
       # CORS (Docker 내부에서는 nginx 프록시로 same-origin)
       CORS_ORIGINS: "http://localhost,http://localhost:80"
@@ -90,13 +93,13 @@ services:
         VITE_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
     environment:
       TZ: ${TIMEZONE:-Asia/Seoul}
+      # unix: = no TCP trust, auto = Docker gateway, or specify one exact peer IP.
+      CF_TRUSTED_PROXY: ${CF_TRUSTED_PROXY:-unix:}
     restart: unless-stopped
     depends_on:
       - server
     ports:
-      - "8080:8080"
-    volumes:
-      - uploads:/data/uploads:ro
+      - "${BIND_ADDRESS:-0.0.0.0}:8080:8080"
 
 volumes:
   pgdata:

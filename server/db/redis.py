@@ -2,17 +2,17 @@
 Redis 연결 관리 및 유틸리티
 
 기능:
-- 캐시 (게시글 목록, 태그, 단일 게시글)
 - 토큰 블랙리스트 (로그아웃, 리프레시 토큰 회전)
 - 조회수 중복 방지 (IP 기반)
 - 분산 락 (이미지 클린업 스케줄러)
 
-Redis 미연결 시 graceful degradation: 모든 기능이 무시되고 앱은 기존처럼 동작
+토큰 폐기 저장소 장애는 503으로 처리한다. 조회수/정리 기능만 제한적으로 폴백한다.
 """
 
 import logging
 from typing import Optional
 from redis.asyncio import Redis
+from fastapi import HTTPException
 
 logger = logging.getLogger("redis")
 
@@ -24,12 +24,12 @@ async def init_redis(url: str = "redis://localhost:6379/0") -> None:
     """Redis 연결 초기화 (앱 시작 시 호출)"""
     global _redis
     try:
-        _redis = Redis.from_url(url, decode_responses=True)
+        _redis = Redis.from_url(url, decode_responses=True, socket_connect_timeout=2, socket_timeout=2)
         await _redis.ping()
-        logger.info(f"Redis connected: {url}")
-    except Exception as e:
-        logger.warning(f"Redis connection failed: {e}. Running without Redis.")
-        _redis = None
+        logger.info("Redis connected")
+    except Exception:
+        # Keep the client so a restored server can be used without an app restart.
+        logger.warning("Redis unavailable; authentication will fail closed")
 
 
 async def close_redis() -> None:
@@ -45,80 +45,45 @@ def get_redis() -> Optional[Redis]:
     return _redis
 
 
-# ==================== 캐시 ====================
-
-async def cache_get(key: str) -> Optional[str]:
-    """캐시 조회 (Redis 없으면 None)"""
-    if not _redis:
-        return None
-    try:
-        return await _redis.get(key)
-    except Exception:
-        return None
-
-
-async def cache_set(key: str, value: str, ttl: int = 300) -> None:
-    """캐시 저장 (기본 TTL: 5분)"""
-    if not _redis:
-        return
-    try:
-        await _redis.setex(key, ttl, value)
-    except Exception:
-        pass
-
-
-async def cache_delete(key: str) -> None:
-    """캐시 삭제"""
-    if not _redis:
-        return
-    try:
-        await _redis.delete(key)
-    except Exception:
-        pass
-
-
-async def cache_delete_pattern(pattern: str) -> None:
-    """패턴 매칭 캐시 일괄 삭제 (예: cache:posts:*)"""
-    if not _redis:
-        return
-    try:
-        cursor = 0
-        while True:
-            cursor, keys = await _redis.scan(cursor, match=pattern, count=100)
-            if keys:
-                await _redis.delete(*keys)
-            if cursor == 0:
-                break
-    except Exception:
-        pass
-
-
 # ==================== 토큰 블랙리스트 ====================
 
-async def blacklist_token(jti: str, ttl: int) -> None:
-    """
-    토큰 JTI를 블랙리스트에 추가
+def _auth_store() -> Redis:
+    if _redis is None:
+        raise HTTPException(503, "Authentication store unavailable")
+    return _redis
 
-    Args:
-        jti: JWT Token ID (uuid)
-        ttl: 만료까지 남은 시간 (초)
-    """
-    if not _redis or not jti:
+
+async def require_auth_store() -> None:
+    try:
+        await _auth_store().ping()
+    except Exception:
+        raise HTTPException(503, "Authentication store unavailable") from None
+
+
+async def blacklist_token(jti: str, ttl: int) -> None:
+    if ttl <= 0:
         return
     try:
-        await _redis.setex(f"blacklist:{jti}", ttl, "1")
+        await _auth_store().setex(f"blacklist:{jti}", ttl, "1")
     except Exception:
-        pass
+        raise HTTPException(503, "Authentication store unavailable") from None
+
+
+async def consume_refresh_token(jti: str, ttl: int) -> bool:
+    """Atomically revoke once; concurrent refreshes must have one winner."""
+    if ttl <= 0:
+        return False
+    try:
+        return bool(await _auth_store().set(f"blacklist:{jti}", "1", ex=ttl, nx=True))
+    except Exception:
+        raise HTTPException(503, "Authentication store unavailable") from None
 
 
 async def is_token_blacklisted(jti: str) -> bool:
-    """토큰이 블랙리스트에 있는지 확인"""
-    if not _redis or not jti:
-        return False
     try:
-        return await _redis.exists(f"blacklist:{jti}") > 0
+        return bool(await _auth_store().exists(f"blacklist:{jti}"))
     except Exception:
-        return False
+        raise HTTPException(503, "Authentication store unavailable") from None
 
 
 # ==================== 조회수 중복 방지 ====================

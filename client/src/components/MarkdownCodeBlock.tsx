@@ -108,7 +108,7 @@ const MermaidDiagram: React.FC<{ code: string }> = ({ code }) => {
                 mermaid.initialize({
                     startOnLoad: false,
                     theme: theme === 'dark' ? 'dark' : 'default',
-                    securityLevel: 'loose',
+                    securityLevel: 'strict',
                 });
                 if (cancelled || generation !== runGenerationRef.current) return;
                 await mermaid.run({ nodes: [element] });

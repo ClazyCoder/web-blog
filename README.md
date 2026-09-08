@@ -43,8 +43,8 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-- App: `http://localhost:8080`
-- API(직접): `http://localhost:8000` (개발 모드에서만 docs 사용 권장)
+- App: `http://localhost:8080` (운영 로그인은 SITE_URL의 HTTPS 주소 사용)
+- API는 nginx의 `/api`로 접근하며 Compose는 8000 포트를 호스트에 공개하지 않습니다.
 
 ### 2) 로컬 개발
 
@@ -87,7 +87,29 @@ POSTGRES_USER=blog_user
 ADMIN_EMAIL=admin@example.com
 SITE_URL=https://yourdomain.com
 SITE_NAME=YSG Blog
+BIND_ADDRESS=0.0.0.0
+CF_TRUSTED_PROXY=unix:
 ```
+
+`CF_TRUSTED_PROXY`는 다음 세 가지 값을 지원합니다.
+
+| 값 | 의미 |
+| --- | --- |
+| `unix:` | TCP로 전달된 Cloudflare 헤더를 신뢰하지 않음(기본값) |
+| `auto` | nginx 컨테이너의 IPv4 default gateway 하나를 trusted peer로 사용 |
+| 단일 IP | 지정한 TCP peer 하나만 신뢰 |
+
+같은 호스트에서 host-network 방식으로 cloudflared를 실행한다면 다음 설정을 권장합니다.
+
+```env
+SITE_URL=https://blog.example.com
+BIND_ADDRESS=127.0.0.1
+CF_TRUSTED_PROXY=auto
+```
+
+Cloudflare Tunnel target은 `http://127.0.0.1:8080`으로 설정합니다. `auto`는 Cloudflare 공인 IP를 찾지 않습니다. nginx 컨테이너의 IPv4 default gateway를 감지해 그 단일 IP만 trusted TCP peer로 사용하며, 탐지에 실패하면 nginx 시작도 실패합니다.
+
+다른 호스트, bridge 방식 cloudflared 또는 별도 reverse proxy 환경에서는 `CF_TRUSTED_PROXY`에 nginx가 실제로 보는 정확한 peer IP를 직접 지정합니다. 이 특수 환경에서만 Docker 네트워크와 nginx 로그로 peer IP를 확인하세요. 전체 사설 대역, Cloudflare 전체 CIDR, `0.0.0.0/0`, `*`는 지정하지 마세요.
 
 `ADMIN_EMAIL` is embedded in the client bundle for the footer, so rebuild the `client` image after changing it (for example, `docker compose up -d --build client`).
 > [!WARNING]

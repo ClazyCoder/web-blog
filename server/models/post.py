@@ -66,6 +66,14 @@ class Post(Base):
         return self.deleted_at is not None
 
     @property
+    def is_public(self) -> bool:
+        return self.status == "published" and not self.is_secret and self.deleted_at is None
+
+    @classmethod
+    def public_conditions(cls):
+        return (cls.status == "published", cls.is_secret.is_(False), cls.deleted_at.is_(None))
+
+    @property
     def is_published(self) -> bool:
         """게시 여부 (호환성 유지)"""
         return self.status == "published"

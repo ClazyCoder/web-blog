@@ -2,15 +2,22 @@
 인증 Pydantic 스키마
 """
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 import re
 
 
 class UserLogin(BaseModel):
     """사용자 로그인 스키마"""
     username: str
-    password: str
+    password: str = Field(min_length=1, max_length=72)
     remember_me: bool = False
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, value):
+        if len(value.encode('utf-8')) > 72:
+            raise ValueError('Password must be at most 72 UTF-8 bytes')
+        return value
     
     @field_validator('username')
     @classmethod

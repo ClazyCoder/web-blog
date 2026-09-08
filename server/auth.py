@@ -1,391 +1,149 @@
-"""
-JWT 인증 관련 유틸리티
-"""
+"""Single-administrator JWT authentication (cookies and Bearer tokens)."""
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import Depends, HTTPException, status, Cookie
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
-import bcrypt
-import uuid
+import math
 import os
+import uuid
 
-# 환경 변수에서 읽기
-_secret_key = os.getenv("SECRET_KEY")
-if not _secret_key:
-    raise RuntimeError(
-        "SECRET_KEY 환경변수가 설정되지 않았습니다. "
-        "보안을 위해 반드시 안전한 키를 설정해 주세요."
-    )
-SECRET_KEY = _secret_key
+import bcrypt
+from fastapi import Cookie, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY must be configured")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-REFRESH_TOKEN_EXPIRE_DAYS = 7  # 로그인 유지 시 리프레시 토큰 만료 (7일)
-
-# 환경변수에서 단일 사용자 정보 가져오기
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD_HASH = None  # 초기화 시점에 설정
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
-
-# Bearer 토큰 스키마 (레거시 지원용)
+ADMIN_PASSWORD_HASH = None
 security = HTTPBearer(auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    비밀번호 검증
-
-    Args:
-        plain_password: 평문 비밀번호
-        hashed_password: 해싱된 비밀번호
-
-    Returns:
-        비밀번호 일치 여부
-    """
-    return bcrypt.checkpw(
-        plain_password.encode('utf-8'),
-        hashed_password.encode(
-            'utf-8') if isinstance(hashed_password, str) else hashed_password
-    )
+    password_bytes = plain_password.encode("utf-8")
+    if not 1 <= len(password_bytes) <= 72:
+        return False
+    return bcrypt.checkpw(password_bytes, hashed_password.encode("utf-8"))
 
 
 def get_password_hash(password: str) -> str:
-    """
-    비밀번호 해싱
-
-    Args:
-        password: 평문 비밀번호
-
-    Returns:
-        해싱된 비밀번호 (문자열)
-    """
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-    return hashed.decode('utf-8')
+    password_bytes = password.encode("utf-8")
+    if not 1 <= len(password_bytes) <= 72:
+        raise ValueError("Administrator password must be 1-72 UTF-8 bytes")
+    return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
 def init_admin_user():
-    """
-    환경변수에서 관리자 비밀번호를 읽어 해시 생성
-    앱 시작 시 한 번만 호출
-    """
     global ADMIN_PASSWORD_HASH
-    admin_password = os.getenv("ADMIN_PASSWORD")
-
-    if not admin_password:
-        raise RuntimeError(
-            "ADMIN_PASSWORD 환경변수가 설정되지 않았습니다. "
-            "보안을 위해 반드시 관리자 비밀번호를 설정해 주세요."
-        )
-
-    ADMIN_PASSWORD_HASH = get_password_hash(admin_password)
+    password = os.getenv("ADMIN_PASSWORD")
+    if not password:
+        raise RuntimeError("ADMIN_PASSWORD must be configured")
+    ADMIN_PASSWORD_HASH = get_password_hash(password)
 
 
 def get_admin_user() -> dict:
-    """
-    환경변수에서 관리자 사용자 정보 가져오기
-
-    Returns:
-        관리자 사용자 정보
-    """
     if ADMIN_PASSWORD_HASH is None:
         init_admin_user()
-
-    return {
-        "user_id": "admin",
-        "username": ADMIN_USERNAME,
-        "email": ADMIN_EMAIL,
-        "hashed_password": ADMIN_PASSWORD_HASH
-    }
+    return {"user_id": "admin", "username": ADMIN_USERNAME,
+            "email": ADMIN_EMAIL, "hashed_password": ADMIN_PASSWORD_HASH}
 
 
 def verify_admin_credentials(username: str, password: str) -> bool:
-    """
-    관리자 자격증명 검증
-
-    Args:
-        username: 사용자명
-        password: 비밀번호
-
-    Returns:
-        검증 성공 여부
-    """
     admin = get_admin_user()
+    # Perform the password check even when the username is incorrect.
+    password_matches = verify_password(password, admin["hashed_password"])
+    return username == admin["username"] and password_matches
 
-    if username != admin["username"]:
-        return False
 
-    return verify_password(password, admin["hashed_password"])
+def _create_token(data: dict, token_type: str, lifetime: timedelta) -> str:
+    payload = {**data, "type": token_type, "jti": str(uuid.uuid4()),
+               "exp": datetime.now(timezone.utc) + lifetime}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """
-    JWT 액세스 토큰 생성
-
-    Args:
-        data: 토큰에 포함할 데이터 (예: {"sub": user_id})
-        expires_delta: 만료 시간 (기본값: 30분)
-
-    Returns:
-        JWT 토큰 문자열
-    """
-    to_encode = data.copy()
-
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-
-    to_encode.update({"exp": expire, "jti": str(uuid.uuid4())})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-    return encoded_jwt
+    return _create_token(data, "access", expires_delta if expires_delta is not None
+                         else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
 
 
 def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """
-    JWT 리프레시 토큰 생성
-
-    Args:
-        data: 토큰에 포함할 데이터 (예: {"sub": user_id})
-        expires_delta: 만료 시간 (기본값: 7일)
-
-    Returns:
-        JWT 리프레시 토큰 문자열
-    """
-    to_encode = data.copy()
-
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-
-    to_encode.update({"exp": expire, "jti": str(uuid.uuid4()), "type": "refresh"})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-    return encoded_jwt
+    return _create_token(data, "refresh", expires_delta if expires_delta is not None
+                         else timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
 
 
-def decode_refresh_token(token: str) -> dict:
-    """
-    리프레시 토큰 디코딩 및 검증
-
-    Args:
-        token: JWT 리프레시 토큰 문자열
-
-    Returns:
-        토큰 페이로드 딕셔너리
-
-    Raises:
-        HTTPException: 토큰이 유효하지 않거나 리프레시 토큰이 아닌 경우
-    """
+def _decode_token(token: str, token_type: str, *, verify_exp: bool = True) -> dict:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-
-        # 리프레시 토큰인지 확인
-        if payload.get("type") != "refresh":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token type",
-            )
-
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={
+            "require_exp": True, "require_jti": True, "require_sub": True,
+            "verify_exp": verify_exp,
+        })
+        exp = payload.get("exp")
+        if (payload.get("type") != token_type or payload.get("sub") != "admin"
+                or not isinstance(payload.get("jti"), str) or not payload["jti"]
+                or type(exp) not in (int, float) or not math.isfinite(exp)):
+            raise JWTError("Invalid claims")
         return payload
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token",
-        )
-
-
-def decode_token_unsafe(token: str) -> Optional[dict]:
-    """
-    만료 여부와 무관하게 토큰 디코딩 (로그아웃 시 jti 추출용)
-
-    Args:
-        token: JWT 토큰 문자열
-
-    Returns:
-        토큰 페이로드 딕셔너리 (디코딩 실패 시 None)
-    """
-    try:
-        return jwt.decode(
-            token, SECRET_KEY, algorithms=[ALGORITHM],
-            options={"verify_exp": False}
-        )
-    except JWTError:
-        return None
+    except (JWTError, ValueError, TypeError, OverflowError):
+        raise HTTPException(401, "Invalid authentication token",
+                            headers={"WWW-Authenticate": "Bearer"}) from None
 
 
 def decode_access_token(token: str) -> dict:
-    """
-    JWT 토큰 디코딩
+    return _decode_token(token, "access")
 
-    Args:
-        token: JWT 토큰 문자열
 
-    Returns:
-        토큰 페이로드 딕셔너리
+def decode_refresh_token(token: str) -> dict:
+    return _decode_token(token, "refresh")
 
-    Raises:
-        HTTPException: 토큰이 유효하지 않은 경우
-    """
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+
+def decode_token_unsafe(token: str) -> Optional[dict]:
+    """Verify signature and claims, allowing expiry only for logout."""
+    for token_type in ("access", "refresh"):
+        try:
+            return _decode_token(token, token_type, verify_exp=False)
+        except HTTPException:
+            continue
+    return None
+
+
+def token_remaining_seconds(payload: dict) -> int:
+    return max(0, math.ceil(payload["exp"] - datetime.now(timezone.utc).timestamp()))
 
 
 async def get_current_user_from_cookie(
-    access_token: Optional[str] = Cookie(None, alias="access_token")
+    access_token: Optional[str] = Cookie(None, alias="access_token"),
 ) -> dict:
-    """
-    HttpOnly 쿠키에서 JWT 토큰을 읽어 사용자 정보 가져오기
-
-    Args:
-        access_token: 쿠키에서 읽은 JWT 토큰
-
-    Returns:
-        사용자 정보 딕셔너리
-
-    Raises:
-        HTTPException: 인증 실패 시
-    """
     from db.redis import is_token_blacklisted
-
     if not access_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-
-    try:
-        payload = decode_access_token(access_token)
-        user_id: str = payload.get("sub")
-
-        if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials",
-            )
-
-        # 토큰 블랙리스트 확인 (로그아웃된 토큰 차단)
-        jti = payload.get("jti")
-        if jti and await is_token_blacklisted(jti):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has been revoked",
-            )
-
-        # 페이로드에서 추가 정보 추출
-        return {
-            "user_id": user_id,
-            "email": payload.get("email"),
-            "username": payload.get("username")
-        }
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-        )
+        raise HTTPException(401, "Not authenticated")
+    payload = decode_access_token(access_token)
+    if await is_token_blacklisted(payload["jti"]):
+        raise HTTPException(401, "Token has been revoked")
+    return {"user_id": payload["sub"], "username": ADMIN_USERNAME, "email": ADMIN_EMAIL}
 
 
 async def get_current_user(
     access_token: Optional[str] = Cookie(None, alias="access_token"),
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> dict:
-    """
-    현재 인증된 사용자 정보 가져오기 (쿠키 우선, Bearer 토큰 지원)
-
-    FastAPI Depends로 사용:
-    @router.get("/protected")
-    async def protected_route(current_user: dict = Depends(get_current_user)):
-        return {"user": current_user}
-
-    Args:
-        access_token: 쿠키에서 읽은 JWT 토큰
-        credentials: Bearer 토큰 (레거시 지원)
-
-    Returns:
-        사용자 정보 딕셔너리
-
-    Raises:
-        HTTPException: 인증 실패 시
-    """
-    # 쿠키 우선 시도
     if access_token:
-        try:
-            return await get_current_user_from_cookie(access_token)
-        except HTTPException:
-            pass
-
-    # Bearer 토큰 시도 (레거시 지원)
+        return await get_current_user_from_cookie(access_token)
     if credentials:
-        from db.redis import is_token_blacklisted
-        token = credentials.credentials
-        payload = decode_access_token(token)
-
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        jti = payload.get("jti")
-        if jti and await is_token_blacklisted(jti):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has been revoked",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        return {
-            "user_id": user_id,
-            "email": payload.get("email"),
-            "username": payload.get("username")
-        }
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-    )
+        return await get_current_user_from_cookie(credentials.credentials)
+    raise HTTPException(401, "Not authenticated")
 
 
-# 선택적 인증 (인증되지 않아도 접근 가능, 인증된 경우 사용자 정보 제공)
 async def get_current_user_optional(
     access_token: Optional[str] = Cookie(None, alias="access_token"),
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
-        HTTPBearer(auto_error=False))
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Optional[dict]:
-    """
-    선택적 인증 - 토큰이 있으면 검증, 없으면 None 반환
-
-    사용 예시:
-    @router.get("/posts")
-    async def get_posts(current_user: Optional[dict] = Depends(get_current_user_optional)):
-        if current_user:
-            # 인증된 사용자를 위한 로직
-            pass
-        else:
-            # 비인증 사용자를 위한 로직
-            pass
-    """
-    if not access_token and credentials is None:
-        return None
-
     try:
-        return await get_current_user(
-            access_token=access_token,
-            credentials=credentials,
-        )
-    except HTTPException:
-        return None
+        return await get_current_user(access_token, credentials)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            return None
+        raise
