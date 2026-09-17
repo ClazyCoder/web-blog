@@ -167,3 +167,59 @@ code {
   padding: 0;
   background: transparent;
 }
+
+/* Mermaid: 모바일에서도 글자 크기를 유지하는 고대비 설계도 캔버스 */
+.code-block .mermaid-surface {
+  background-color: #eef6f4;
+  background-image:
+    radial-gradient(circle at 12% 0%, rgb(16 185 129 / 0.09), transparent 32%),
+    linear-gradient(rgb(15 118 110 / 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(15 118 110 / 0.055) 1px, transparent 1px);
+  background-position: 0 0, -1px -1px, -1px -1px;
+  background-size: auto, 24px 24px, 24px 24px;
+  scrollbar-color: #0f766e #dceae7;
+  scrollbar-width: thin;
+}
+
+.code-block .mermaid-surface:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: -3px;
+}
+
+.code-block .mermaid-surface svg {
+  display: block;
+  flex: none;
+  margin-inline: auto;
+}
+
+.code-block .mermaid-surface::-webkit-scrollbar {
+  height: 10px;
+}
+
+.code-block .mermaid-surface::-webkit-scrollbar-track {
+  background: #dceae7;
+}
+
+.code-block .mermaid-surface::-webkit-scrollbar-thumb {
+  background: #0f766e;
+  border: 3px solid #dceae7;
+  border-radius: 999px;
+}
+
+.dark .code-block .mermaid-surface {
+  background-color: #0b1320;
+  background-image:
+    radial-gradient(circle at 12% 0%, rgb(52 211 153 / 0.12), transparent 34%),
+    linear-gradient(rgb(148 163 184 / 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(148 163 184 / 0.055) 1px, transparent 1px);
+  scrollbar-color: #34d399 #111c2d;
+}
+
+.dark .code-block .mermaid-surface::-webkit-scrollbar-track {
+  background: #111c2d;
+}
+
+.dark .code-block .mermaid-surface::-webkit-scrollbar-thumb {
+  background: #34d399;
+  border-color: #111c2d;
+}
