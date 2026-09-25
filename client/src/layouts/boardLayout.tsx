@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 import { ContentCard } from "../components";
 import { useAuth } from '../context/useAuth';
 import api from '../utils/api';
@@ -20,6 +21,25 @@ interface PostItem {
     updated_at: string;
     published_at: string | null;
 }
+
+const HomeIntro = () => (
+    <section className="mb-8 border-b border-gray-200 pb-8 pt-2 dark:border-gray-700 sm:mb-10 sm:pb-10" aria-labelledby="home-title">
+        <p className="mb-3 text-sm font-semibold text-emerald-700 dark:text-emerald-300">AI · 개발 · 홈랩</p>
+        <h1 id="home-title" className="max-w-2xl text-3xl font-bold leading-tight tracking-tight text-gray-900 dark:text-white sm:text-4xl [word-break:keep-all] wrap-anywhere">
+            직접 만들고 운영하며 남긴 기술 기록
+        </h1>
+        <p className="mt-4 max-w-xl text-base leading-7 text-gray-600 dark:text-gray-300 [word-break:keep-all]">
+            모델 실험부터 홈랩 구축까지, 구현 과정과 문제를 해결한 방법을 정리합니다.
+        </p>
+        <nav aria-label="주제별 글" className="mt-5 flex flex-wrap gap-2">
+            {['LLM', 'MLOps', 'Homelab', 'Dev'].map(tag => (
+                <Link key={tag} to={`/board?tags=${encodeURIComponent(tag)}`} className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:border-emerald-600 hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:border-gray-600 dark:text-gray-200 dark:hover:text-emerald-300">
+                    {tag}
+                </Link>
+            ))}
+        </nav>
+    </section>
+);
 
 const BoardLayout: React.FC = () => {
     const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -74,6 +94,7 @@ const BoardLayout: React.FC = () => {
         return (
             <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-6 sm:py-8">
                 <div className="max-w-6xl mx-auto px-4">
+                    <HomeIntro />
                     <div className="mb-8 animate-fade-in-up">
                         <div className="h-9 skeleton-shimmer rounded-lg w-48 mb-2" />
                         <div className="h-4 skeleton-shimmer rounded w-32" />
@@ -121,13 +142,12 @@ const BoardLayout: React.FC = () => {
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-6 sm:py-8">
             <div className="max-w-6xl mx-auto px-4">
                 {/* 헤더 */}
-                <div className="mb-8 animate-fade-in-up">
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                        게시글
-                    </h1>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        최근 작성된 글
-                    </p>
+                <HomeIntro />
+                <div className="mb-5 flex items-center justify-between gap-4">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">최근 글</h2>
+                    <Link to="/board" className="shrink-0 rounded-lg px-2 py-2 text-sm font-semibold text-emerald-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:text-emerald-300">
+                        전체 글 보기 <span aria-hidden="true">→</span>
+                    </Link>
                 </div>
 
                 {posts.length === 0 ? (
@@ -155,6 +175,13 @@ const BoardLayout: React.FC = () => {
                                 index={index}
                             />
                         ))}
+                    </div>
+                )}
+                {posts.length > 0 && (
+                    <div className="mt-8 text-center">
+                        <Link to="/board" className="inline-flex rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-800 hover:border-emerald-600 hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
+                            전체 글 둘러보기 <span className="ml-2" aria-hidden="true">→</span>
+                        </Link>
                     </div>
                 )}
             </div>
