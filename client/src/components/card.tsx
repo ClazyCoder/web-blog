@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import PostTags from './PostTags';
 
 export interface ContentCardProps {
     id: string;
@@ -9,6 +10,7 @@ export interface ContentCardProps {
     imgSrc?: string;
     tags?: string[];
     index?: number;
+    isSecret?: boolean;
 }
 
 const ContentCard: React.FC<ContentCardProps> = ({
@@ -19,6 +21,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
     imgSrc,
     tags = [],
     index = 0,
+    isSecret = false,
 }) => {
     const [imgError, setImgError] = useState(false);
 
@@ -65,18 +68,10 @@ const ContentCard: React.FC<ContentCardProps> = ({
                 )}
 
                 {/* 태그 */}
-                {tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-3">
-                        {tags.map((tag) => (
-                            <span
-                                key={tag}
-                                className="text-xs px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 rounded-full font-medium"
-                            >
-                                {tag}
-                            </span>
-                        ))}
-                    </div>
-                )}
+                <div className="mb-3 space-y-2">
+                    {isSecret && <span className="text-xs font-medium text-amber-700 dark:text-amber-300">비밀글</span>}
+                    <PostTags tags={tags} />
+                </div>
 
                 {/* 날짜 */}
                 <div className="mt-auto pt-2 flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">

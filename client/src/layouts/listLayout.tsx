@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 import useDebounce from '../hooks/useDebounce';
 import api from '../utils/api';
+import PostTags from '../components/PostTags';
 
 interface Post {
     id: number;
@@ -129,20 +130,27 @@ const ListLayout: React.FC = () => {
         const recoveredWidth = tagChipMoreButtonRef.current
             ? tagChipMoreButtonRef.current.offsetWidth + 8
             : 0;
-        const availableWidth = visibleContainer.clientWidth + recoveredWidth;
+        const availableWidth = visibleContainer.clientWidth + recoveredWidth - 4;
         if (availableWidth <= 0) {
             setCollapsedChipCount(chipNodes.length);
             return;
         }
 
         const gapPx = 8;
+        const totalWidth = chipNodes.reduce((sum, node) => sum + node.offsetWidth, 0) + gapPx * (chipNodes.length - 1);
+        if (totalWidth <= availableWidth) {
+            setCollapsedChipCount(chipNodes.length);
+            return;
+        }
+        // Reserve the +N control before deciding how many whole chips fit.
+        const chipBudget = availableWidth - (tagChipMoreButtonRef.current?.offsetWidth ?? 44) - gapPx;
         let usedWidth = 0;
         let fitCount = 0;
 
         for (const node of chipNodes) {
             const chipWidth = node.offsetWidth;
             const nextWidth = fitCount === 0 ? chipWidth : chipWidth + gapPx;
-            if (usedWidth + nextWidth > availableWidth) break;
+            if (usedWidth + nextWidth > chipBudget) break;
             usedWidth += nextWidth;
             fitCount += 1;
         }
@@ -557,7 +565,7 @@ const ListLayout: React.FC = () => {
                                     <button
                                         key={tag}
                                         onClick={() => handleTagToggle(tag)}
-                                        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ${isSelected
+                                        className={`shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ${isSelected
                                             ? 'bg-emerald-600 text-white shadow-sm'
                                             : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                                             }`}
@@ -590,7 +598,7 @@ const ListLayout: React.FC = () => {
                                     type="button"
                                     aria-label="태그 더보기"
                                     onClick={toggleTagPopover}
-                                    className={`w-8 h-8 inline-flex items-center justify-center rounded-full border text-sm font-semibold transition-colors ${isTagPopoverOpen
+                                    className={`shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-full border text-sm font-semibold transition-colors ${isTagPopoverOpen
                                         ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
                                         : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                                         }`}
@@ -605,7 +613,7 @@ const ListLayout: React.FC = () => {
                                             key={`measure-${tag}`}
                                             type="button"
                                             data-chip-measure="true"
-                                            className="px-3 py-1.5 text-xs font-medium rounded-full"
+                                            className="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium rounded-full"
                                         >
                                             {tag}
                                         </button>
@@ -813,14 +821,11 @@ const ListLayout: React.FC = () => {
                                                     🔒 비밀
                                                 </span>
                                             )}
-                                            {post.tags.map(tag => (
-                                                <span
-                                                    key={tag}
-                                                    className="text-xs px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 rounded-full font-medium"
-                                                >
-                                                    {tag}
-                                                </span>
-                                            ))}
+                                            <PostTags tags={post.tags} onSelect={tag => {
+                                                setSearchTerm('');
+                                                setSelectedTags([tag]);
+                                                setCurrentPage(1);
+                                            }} />
                                         </div>
                                     </div>
 

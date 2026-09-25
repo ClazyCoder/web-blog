@@ -17,6 +17,7 @@ import type { TocItem } from '../utils/tocParser';
 import TableOfContents from '../components/TableOfContents';
 import MarkdownCodeBlock from '../components/MarkdownCodeBlock';
 import MarkdownCode from '../components/MarkdownCode';
+import PostTags from '../components/PostTags';
 
 interface PostData {
     id: number;
@@ -509,15 +510,8 @@ const PageLayout: React.FC = () => {
 
                         {/* 태그 */}
                         {pageData.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-4">
-                                {pageData.tags.map(tag => (
-                                    <span
-                                        key={tag}
-                                        className="text-sm px-3 py-1 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded-full"
-                                    >
-                                        {tag}
-                                    </span>
-                                ))}
+                            <div className="mt-4">
+                                <PostTags key={pageData.id} tags={pageData.tags} />
                             </div>
                         )}
                     </header>

@@ -150,7 +150,8 @@ const BoardLayout: React.FC = () => {
                                 text={post.excerpt || ''}
                                 last_updated={formatDate(post.created_at)}
                                 imgSrc={post.thumbnail || undefined}
-                                tags={post.is_secret ? ['🔒 비밀글', ...post.tags] : post.tags}
+                                tags={post.tags}
+                                isSecret={post.is_secret}
                                 index={index}
                             />
                         ))}
