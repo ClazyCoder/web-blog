@@ -474,7 +474,7 @@ const PageLayout: React.FC = () => {
                             {pageData.title}
                         </h1>
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-400">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-300">
                                 <span>작성일: {formatDate(pageData.created_at)}</span>
                                 {pageData.updated_at !== pageData.created_at && (
                                     <span>수정일: {formatDate(pageData.updated_at)}</span>

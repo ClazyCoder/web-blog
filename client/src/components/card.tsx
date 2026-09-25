@@ -74,7 +74,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
                 </div>
 
                 {/* 날짜 */}
-                <div className="mt-auto pt-2 flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                <div className="mt-auto pt-2 flex items-center gap-1.5 text-[13px] text-gray-600 dark:text-gray-300">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
