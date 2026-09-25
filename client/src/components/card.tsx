@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 export interface ContentCardProps {
-    id?: string;
+    id: string;
     title: string;
     text: string;
     last_updated: string;
@@ -20,14 +20,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
     tags = [],
     index = 0,
 }) => {
-    const navigate = useNavigate();
     const [imgError, setImgError] = useState(false);
-
-    const handleReadClick = () => {
-        if (id) {
-            navigate(`/board/${id}`);
-        }
-    };
 
     // XSS 방지: 안전한 이미지 URL만 허용
     const isSafeImageUrl = imgSrc &&
@@ -38,9 +31,8 @@ const ContentCard: React.FC<ContentCardProps> = ({
     const hasValidImage = isSafeImageUrl && !imgError;
 
     return (
-        <div
-            onClick={handleReadClick}
-            className="group bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700/50 shadow-sm cursor-pointer transition-all duration-300 hover:shadow-lg hover:border-emerald-200 dark:hover:border-emerald-800 hover:-translate-y-1 animate-fade-in-up"
+        <article
+            className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700/50 shadow-sm transition-all duration-300 hover:shadow-lg hover:border-emerald-200 dark:hover:border-emerald-800 hover:-translate-y-1 animate-fade-in-up"
             style={{ animationDelay: `${index * 80}ms` }}
         >
             {/* 썸네일 */}
@@ -65,7 +57,9 @@ const ContentCard: React.FC<ContentCardProps> = ({
             {/* 본문 */}
             <div className="p-5">
                 <h3 className="font-semibold text-gray-900 dark:text-white text-[15px] line-clamp-2 mb-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                    {title}
+                    <Link to={`/board/${id}`} className="post-card-link">
+                        {title}
+                    </Link>
                 </h3>
 
                 {text && (
@@ -96,7 +90,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
                     {last_updated}
                 </div>
             </div>
-        </div>
+        </article>
     );
 };
 

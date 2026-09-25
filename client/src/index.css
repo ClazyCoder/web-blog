@@ -168,6 +168,28 @@ code {
   background: transparent;
 }
 
+/* Native links keep cards usable with a keyboard and the browser's link menu. */
+.post-card-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.post-card-link:focus-visible {
+  outline: none;
+}
+
+.post-card-link:focus-visible::after {
+  outline: 3px solid #059669;
+  outline-offset: -3px;
+  border-radius: 0.75rem;
+}
+
+.dark .post-card-link:focus-visible::after {
+  outline-color: #6ee7b7;
+}
+
 /* Mermaid: 모바일에서도 글자 크기를 유지하는 고대비 설계도 캔버스 */
 .code-block .mermaid-surface {
   background-color: #eef6f4;

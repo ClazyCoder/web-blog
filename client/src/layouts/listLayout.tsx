@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 import useDebounce from '../hooks/useDebounce';
 import api from '../utils/api';
@@ -435,10 +435,6 @@ const ListLayout: React.FC = () => {
         }
     };
 
-    const handlePostClick = (postId: number) => {
-        navigate(`/board/${postId}`);
-    };
-
     const handleWriteClick = () => {
         navigate('/editor');
     };
@@ -781,10 +777,9 @@ const ListLayout: React.FC = () => {
                         </div>
                     ) : (
                         posts.map((post, index) => (
-                            <div
+                            <article
                                 key={post.id}
-                                onClick={() => handlePostClick(post.id)}
-                                className={`group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 animate-fade-in-up ${post.is_secret
+                                className={`group relative bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 animate-fade-in-up ${post.is_secret
                                     ? 'border-amber-200/80 dark:border-amber-800/60 hover:border-amber-300 dark:hover:border-amber-700'
                                     : 'border-gray-100 dark:border-gray-700/50 hover:border-emerald-200 dark:hover:border-emerald-800'
                                     }`}
@@ -797,7 +792,9 @@ const ListLayout: React.FC = () => {
                                                 ? 'group-hover:text-amber-600 dark:group-hover:text-amber-400'
                                                 : 'group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
                                                 }`}>
-                                                {post.title}
+                                                <Link to={`/board/${post.id}`} className="post-card-link">
+                                                    {post.title}
+                                                </Link>
                                             </h3>
                                             {post.is_secret && (
                                                 <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 shrink-0">
@@ -839,7 +836,7 @@ const ListLayout: React.FC = () => {
                                         </span>
                                     </div>
                                 </div>
-                            </div>
+                            </article>
                         ))
                     )}
                 </div>
