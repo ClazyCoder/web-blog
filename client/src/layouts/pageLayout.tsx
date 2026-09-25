@@ -405,7 +405,7 @@ const PageLayout: React.FC = () => {
         return (
             <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
                 <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 xl:flex xl:gap-8">
-                    <div className="flex-1 min-w-0 max-w-4xl">
+                    <div className="flex-1 min-w-0 max-w-4xl mx-auto xl:mx-0">
                         {/* 제목 스켈레톤 */}
                         <div className="mb-6 sm:mb-8">
                             <div className="h-9 skeleton-shimmer rounded-lg w-3/4 mb-4" />
@@ -466,7 +466,7 @@ const PageLayout: React.FC = () => {
 
             <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 xl:flex xl:gap-8">
                 {/* 메인 콘텐츠 영역 */}
-                <article className="flex-1 min-w-0 max-w-4xl animate-fade-in-up">
+                <article className="flex-1 min-w-0 max-w-4xl mx-auto xl:mx-0 animate-fade-in-up">
                     {/* 헤더 섹션 */}
                     <header className="mb-6 sm:mb-8">
                         <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">
