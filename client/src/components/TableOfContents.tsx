@@ -5,6 +5,8 @@ interface TableOfContentsProps {
     headings: TocItem[];
     activeId: string;
     onItemClick?: (id: string) => void;
+    showTitle?: boolean;
+    onTopClick?: () => void;
 }
 
 interface TocNode {
@@ -56,7 +58,7 @@ function buildParentMap(nodes: TocNode[]): Map<string, string | null> {
     return parentMap;
 }
 
-const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, onItemClick }) => {
+const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, onItemClick, showTitle = true, onTopClick }) => {
     const itemRefs = React.useRef<Map<string, HTMLAnchorElement | null>>(new Map());
     const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
     const [showDeepHeadings, setShowDeepHeadings] = React.useState(false);
@@ -111,12 +113,20 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
     }, [effectiveActiveId]);
 
     const scrollToTop = () => {
+        if (onTopClick) {
+            onTopClick();
+            return;
+        }
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
     };
 
     const handleClick = (e: React.MouseEvent, id: string) => {
         e.preventDefault();
+        if (onItemClick) {
+            onItemClick(id);
+            return;
+        }
         const element = document.getElementById(id);
         if (element) {
             const headerOffset = 80;
@@ -124,7 +134,6 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
             const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             window.scrollTo({ top: y, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
         }
-        onItemClick?.(id);
     };
 
     const toggleExpanded = (id: string) => {
@@ -227,9 +236,9 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
         <nav aria-label="목차">
             <div className="mb-3">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-900 dark:text-gray-100">
-                        목차
-                    </h2>
+                    {showTitle && (
+                        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">목차</h2>
+                    )}
                     <span className="text-xs text-gray-500 dark:text-gray-400">
                         {headings.length}개 섹션
                     </span>
@@ -242,7 +251,7 @@ const TableOfContents: React.FC<TableOfContentsProps> = ({ headings, activeId, o
                             className="rounded-md px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                             aria-pressed={showDeepHeadings}
                         >
-                            {showDeepHeadings ? 'h3+ 접기' : 'h3+ 펼치기'}
+                            {showDeepHeadings ? '세부 목차 접기' : '세부 목차 펼치기'}
                         </button>
                     </div>
                     <button

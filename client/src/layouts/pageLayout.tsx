@@ -12,7 +12,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import 'highlight.js/styles/github-dark-dimmed.css';
 import { useAuth } from '../context/useAuth';
 import api from '../utils/api';
-import { parseMarkdownHeadings, extractTextFromChildren, slugifyHeadingText } from '../utils/tocParser';
+import { parseMarkdownHeadings, extractTextFromChildren, resolveHeadingId } from '../utils/tocParser';
 import type { TocItem } from '../utils/tocParser';
 import TableOfContents from '../components/TableOfContents';
 import MarkdownCodeBlock from '../components/MarkdownCodeBlock';
@@ -35,38 +35,12 @@ interface PostData {
     published_at: string | null;
 }
 
-/**
- * headings 배열에서 텍스트에 해당하는 slug를 찾아 반환
- * 동일 텍스트가 여러 번 등장할 경우 순서대로 매칭하기 위해 usedIds Set을 활용
- */
-function findHeadingId(text: string, level: number, headings: TocItem[], usedIds: Set<string>): string {
-    for (const h of headings) {
-        if (h.level === level && h.text === text && !usedIds.has(h.id)) {
-            usedIds.add(h.id);
-            return h.id;
-        }
-    }
-    // fallback: TOC 파서와 동일한 slug 규칙 + 중복 방지
-    const baseSlug = slugifyHeadingText(text);
-    let nextSlug = baseSlug;
-    let suffix = 1;
-    while (usedIds.has(nextSlug)) {
-        nextSlug = `${baseSlug}-${suffix}`;
-        suffix += 1;
-    }
-    usedIds.add(nextSlug);
-    return nextSlug;
-}
-
 interface PostMarkdownContentProps {
     content: string;
     headings: TocItem[];
 }
 
 const PostMarkdownContent = React.memo<PostMarkdownContentProps>(({ content, headings }) => {
-    // 본문 리렌더 시 동일한 heading id 할당 순서를 보장한다.
-    const renderUsedIds = new Set<string>();
-
     return (
         <div className="max-w-none markdown-content article-prose">
             <ReactMarkdown
@@ -82,27 +56,27 @@ const PostMarkdownContent = React.memo<PostMarkdownContentProps>(({ content, hea
                     },
                 }], rehypeKatex, [rehypeHighlight, { plainText: ['mermaid'] }]]}
                 components={{
-                    h1: ({ children }) => {
+                    h1: ({ children, node }) => {
                         const text = extractTextFromChildren(children);
-                        const headingId = findHeadingId(text, 1, headings, renderUsedIds);
+                        const headingId = resolveHeadingId(text, 1, headings, node?.position?.start.line);
                         return (
                             <h1 id={headingId} className="text-2xl sm:text-3xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                 {children}
                             </h1>
                         );
                     },
-                    h2: ({ children }) => {
+                    h2: ({ children, node }) => {
                         const text = extractTextFromChildren(children);
-                        const headingId = findHeadingId(text, 2, headings, renderUsedIds);
+                        const headingId = resolveHeadingId(text, 2, headings, node?.position?.start.line);
                         return (
                             <h2 id={headingId} className="text-xl sm:text-2xl font-bold mb-3 mt-6 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                 {children}
                             </h2>
                         );
                     },
-                    h3: ({ children }) => {
+                    h3: ({ children, node }) => {
                         const text = extractTextFromChildren(children);
-                        const headingId = findHeadingId(text, 3, headings, renderUsedIds);
+                        const headingId = resolveHeadingId(text, 3, headings, node?.position?.start.line);
                         return (
                             <h3 id={headingId} className="text-lg sm:text-xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100 scroll-mt-20">
                                 {children}
@@ -211,6 +185,45 @@ const PageLayout: React.FC = () => {
     const [activeHeadingId, setActiveHeadingId] = useState<string>('');
     const [isMobileTocOpen, setIsMobileTocOpen] = useState(false);
     const lastTocNavigatedHashRef = useRef<string>('');
+    const tocButtonRef = useRef<HTMLButtonElement>(null);
+    const tocPanelRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!isMobileTocOpen) return;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        tocPanelRef.current?.focus();
+        const desktop = window.matchMedia('(min-width: 1280px)');
+        const closeOnDesktop = () => {
+            if (desktop.matches) setIsMobileTocOpen(false);
+        };
+        desktop.addEventListener('change', closeOnDesktop);
+        const trigger = tocButtonRef.current;
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            desktop.removeEventListener('change', closeOnDesktop);
+            if (!desktop.matches) trigger?.focus({ preventScroll: true });
+        };
+    }, [isMobileTocOpen]);
+
+    const handleTocKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            setIsMobileTocOpen(false);
+        }
+        if (event.key !== 'Tab') return;
+        const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'));
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!first || !last) return;
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === event.currentTarget)) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
 
     useEffect(() => {
         if (authLoading) return;
@@ -325,19 +338,22 @@ const PageLayout: React.FC = () => {
     }, [headings, updateActiveHeadingByScroll]);
 
     const scrollToHeadingByHash = useCallback((hash: string) => {
-        const el = document.getElementById(hash);
+        let decodedHash = hash;
+        try { decodedHash = decodeURIComponent(hash); } catch { /* Retain malformed hashes as text. */ }
+        const el = document.getElementById(decodedHash);
         if (!el) return false;
 
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const y = el.getBoundingClientRect().top + window.scrollY - 80;
         window.scrollTo({ top: y, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
-        setActiveHeadingId(hash);
+        setActiveHeadingId(decodedHash);
         return true;
     }, []);
 
     // 해시 기반 진입/이동 동기화
     useEffect(() => {
-        const hash = location.hash.slice(1);
+        let hash = location.hash.slice(1);
+        try { hash = decodeURIComponent(hash); } catch { /* Retain malformed hashes as text. */ }
         if (!hash || headings.length === 0) return;
 
         // TOC 클릭 직후의 동일 해시 변경은 이미 TableOfContents에서 스크롤했으므로 중복 스크롤 방지
@@ -384,20 +400,13 @@ const PageLayout: React.FC = () => {
     };
 
     const handleTocItemClick = useCallback((headingId: string) => {
-        const currentHash = location.hash.slice(1);
-
-        // 같은 해시를 다시 클릭한 경우에도 본문 스크롤을 강제해 UX를 일관되게 유지
-        if (currentHash === headingId) {
-            scrollToHeadingByHash(headingId);
-            setIsMobileTocOpen(false);
-            return;
-        }
-
         lastTocNavigatedHashRef.current = headingId;
         setActiveHeadingId(headingId);
         setIsMobileTocOpen(false);
-        navigate(`${location.pathname}#${headingId}`, { replace: true, preventScrollReset: true });
-    }, [navigate, location.pathname, location.hash, scrollToHeadingByHash]);
+        navigate(`${location.pathname}#${encodeURIComponent(headingId)}`, { replace: true, preventScrollReset: true });
+        // Wait until the drawer has unmounted and released the body scroll lock.
+        window.requestAnimationFrame(() => scrollToHeadingByHash(headingId));
+    }, [navigate, location.pathname, scrollToHeadingByHash]);
 
     // 사이트 이름 (환경변수 또는 기본값)
     const siteName = import.meta.env.VITE_SITE_NAME || 'YSG Blog';
@@ -551,13 +560,17 @@ const PageLayout: React.FC = () => {
             {headings.length > 0 && (
                 <>
                     <button
+                        ref={tocButtonRef}
                         onClick={() => setIsMobileTocOpen(true)}
-                        className="xl:hidden fixed bottom-6 right-6 z-40 w-12 h-12 bg-emerald-600 dark:bg-emerald-500 hover:bg-emerald-700 dark:hover:bg-emerald-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105"
+                        className="xl:hidden fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-4 z-40 h-12 px-4 gap-2 bg-emerald-700 dark:bg-emerald-600 hover:bg-emerald-800 text-white rounded-full shadow-lg flex items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
                         aria-label="목차 열기"
+                        aria-expanded={isMobileTocOpen}
+                        aria-controls="mobile-toc"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                         </svg>
+                        <span className="text-sm font-semibold">목차</span>
                     </button>
 
                     {/* 모바일 TOC 드로어 */}
@@ -567,11 +580,17 @@ const PageLayout: React.FC = () => {
                             onClick={() => setIsMobileTocOpen(false)}
                         />
                     )}
-                    <div
-                        className={`xl:hidden fixed bottom-0 left-0 right-0 z-50 transform transition-transform duration-300 ease-in-out ${isMobileTocOpen ? 'translate-y-0' : 'translate-y-full'
-                            }`}
+                    {isMobileTocOpen && <div
+                        id="mobile-toc"
+                        ref={tocPanelRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="mobile-toc-title"
+                        tabIndex={-1}
+                        onKeyDown={handleTocKeyDown}
+                        className="xl:hidden fixed bottom-0 left-0 right-0 z-50 outline-none"
                     >
-                        <div className="bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl border-t border-gray-200 dark:border-gray-700 max-h-[70vh] flex flex-col">
+                        <div className="bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl border-t border-gray-200 dark:border-gray-700 max-h-[70dvh] flex flex-col pb-[env(safe-area-inset-bottom)]">
                             {/* 드로어 핸들 */}
                             <div className="flex items-center justify-center pt-3 pb-1">
                                 <div className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
@@ -579,12 +598,12 @@ const PageLayout: React.FC = () => {
 
                             {/* 드로어 헤더 */}
                             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700">
-                                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                                <h2 id="mobile-toc-title" className="text-base font-semibold text-gray-900 dark:text-white">
                                     목차
                                 </h2>
                                 <button
                                     onClick={() => setIsMobileTocOpen(false)}
-                                    className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    className="p-3 text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
                                     aria-label="목차 닫기"
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -594,15 +613,20 @@ const PageLayout: React.FC = () => {
                             </div>
 
                             {/* 드로어 콘텐츠 */}
-                            <div className="overflow-y-auto px-5 py-4">
+                            <div className="overflow-y-auto overscroll-contain px-5 py-4">
                                 <TableOfContents
                                     headings={headings}
                                     activeId={activeHeadingId}
                                     onItemClick={handleTocItemClick}
+                                    showTitle={false}
+                                    onTopClick={() => {
+                                        setIsMobileTocOpen(false);
+                                        window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+                                    }}
                                 />
                             </div>
                         </div>
-                    </div>
+                    </div>}
                 </>
             )}
         </div>

@@ -5,6 +5,7 @@ export interface TocItem {
     id: string;
     text: string;
     level: number;
+    sourceLine?: number;
 }
 
 /**
@@ -61,7 +62,7 @@ export function parseMarkdownHeadings(markdown: string): TocItem[] {
     const slugCount = new Map<string, number>();
     let inCodeBlock = false;
 
-    for (const line of lines) {
+    for (const [lineIndex, line] of lines.entries()) {
         // 코드 블록 토글
         if (line.trim().startsWith('```')) {
             inCodeBlock = !inCodeBlock;
@@ -81,11 +82,19 @@ export function parseMarkdownHeadings(markdown: string): TocItem[] {
                 .trim();
             const id = generateSlug(text, slugCount);
 
-            headings.push({ id, text, level });
+            headings.push({ id, text, level, sourceLine: lineIndex + 1 });
         }
     }
 
     return headings;
+}
+
+/** Resolve from source position, so repeated React renders do not consume IDs. */
+export function resolveHeadingId(text: string, level: number, headings: TocItem[], sourceLine?: number): string {
+    const byPosition = sourceLine === undefined ? undefined : headings.find(h => h.sourceLine === sourceLine && h.level === level);
+    if (byPosition) return byPosition.id;
+    const byText = headings.find(h => h.text === text && h.level === level);
+    return byText?.id || `${slugifyHeadingText(text)}-${sourceLine ?? level}`;
 }
 
 /**
