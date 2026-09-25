@@ -67,7 +67,7 @@ const PostMarkdownContent = React.memo<PostMarkdownContentProps>(({ content, hea
     const renderUsedIds = new Set<string>();
 
     return (
-        <div className="max-w-none markdown-content">
+        <div className="max-w-none markdown-content article-prose">
             <ReactMarkdown
                 remarkPlugins={[remarkMath, remarkGfm]}
                 rehypePlugins={[rehypeRaw, [rehypeSanitize, {
@@ -468,8 +468,8 @@ const PageLayout: React.FC = () => {
                 {/* 메인 콘텐츠 영역 */}
                 <article className="flex-1 min-w-0 max-w-4xl mx-auto xl:mx-0 animate-fade-in-up">
                     {/* 헤더 섹션 */}
-                    <header className="mb-6 sm:mb-8">
-                        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">
+                    <header className="max-w-3xl mx-auto mb-6 sm:mb-8">
+                        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white [word-break:keep-all] wrap-anywhere">
                             {pageData.title}
                         </h1>
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

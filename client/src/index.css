@@ -168,6 +168,18 @@ code {
   background: transparent;
 }
 
+/* Keep prose at a comfortable measure while diagrams, code and tables stay wide. */
+.article-prose > :where(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote) {
+  max-width: 48rem;
+  margin-inline: auto;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.article-prose > :where(ul, ol, blockquote) {
+  line-height: 1.75;
+}
+
 /* Native links keep cards usable with a keyboard and the browser's link menu. */
 .post-card-link::after {
   content: '';
