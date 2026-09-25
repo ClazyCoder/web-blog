@@ -387,6 +387,48 @@ async def get_all_tags(
         )
 
 
+@router.get("/{post_id}/related")
+@limiter.limit("60/minute")
+async def get_related_posts(
+    request: Request,
+    post_id: int,
+    current_user: Optional[dict] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rank public posts by shared tags, then category; fall back to recent posts."""
+    source = await db.get(Post, post_id)
+    if not source or source.is_deleted or (not current_user and not source.is_public):
+        raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다")
+
+    # Rank lightweight metadata first; load content/images only for the three results.
+    rows = (await db.execute(
+        select(Post.id, Post.tags, Post.category_slug)
+        .where(Post.id != post_id, *Post.public_conditions())
+        .order_by(desc(Post.created_at), desc(Post.id))
+    )).all()
+    source_tags = set(source.tags or [])
+
+    def score(row):
+        shared = len(source_tags.intersection(row.tags or []))
+        same_category = bool(source.category_slug and source.category_slug == row.category_slug)
+        return shared, same_category
+
+    matches = [row for row in rows if any(score(row))]
+    ranked = sorted(matches, key=score, reverse=True) if matches else rows
+    ids = [row.id for row in ranked[:3]]
+    if not ids:
+        return {"items": [], "match": "recent"}
+    posts = (await db.execute(
+        select(Post).options(selectinload(Post.images))
+        .where(Post.id.in_(ids), *Post.public_conditions())
+    )).scalars().all()
+    by_id = {post.id: post for post in posts}
+    return {
+        "items": [PostResponse(**by_id[ident].to_dict(include_content=False)) for ident in ids if ident in by_id],
+        "match": "topic" if matches else "recent",
+    }
+
+
 @router.get("/{post_id}", response_model=PostResponse)
 @limiter.limit("60/minute")
 async def get_post(

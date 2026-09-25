@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -18,6 +18,7 @@ import TableOfContents from '../components/TableOfContents';
 import MarkdownCodeBlock from '../components/MarkdownCodeBlock';
 import MarkdownCode from '../components/MarkdownCode';
 import PostTags from '../components/PostTags';
+import RelatedPosts from '../components/RelatedPosts';
 
 interface PostData {
     id: number;
@@ -180,6 +181,7 @@ const PageLayout: React.FC = () => {
     const [isDeleting, setIsDeleting] = useState(false);
     const viewCounted = useRef(false);
     const hasRedirectedAfterAccessLoss = useRef(false);
+    const initialHashRef = useRef(location.hash);
 
     // TOC 상태
     const [activeHeadingId, setActiveHeadingId] = useState<string>('');
@@ -228,6 +230,11 @@ const PageLayout: React.FC = () => {
     useEffect(() => {
         if (authLoading) return;
         const controller = new AbortController();
+        viewCounted.current = false;
+        hasRedirectedAfterAccessLoss.current = false;
+        setError(null);
+        setIsMobileTocOpen(false);
+        if (!initialHashRef.current) window.scrollTo({ top: 0, behavior: 'instant' });
 
         const fetchPost = async () => {
             if (!id) {
@@ -530,15 +537,16 @@ const PageLayout: React.FC = () => {
 
                     {/* 하단 네비게이션 */}
                     <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
-                        <button
-                            onClick={() => navigate('/board')}
+                        <RelatedPosts key={pageData.id} postId={pageData.id} />
+                        <Link
+                            to="/board"
                             className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                             </svg>
-                            게시판으로 돌아가기
-                        </button>
+                            전체 글 보기
+                        </Link>
                     </div>
                 </article>
 
