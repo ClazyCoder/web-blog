@@ -149,7 +149,7 @@ const BoardLayout: React.FC = () => {
                                 title={post.is_secret ? `🔒 ${post.title}` : post.title}
                                 text={post.excerpt || ''}
                                 last_updated={formatDate(post.created_at)}
-                                imgSrc={post.thumbnail || '/placeholder.png'}
+                                imgSrc={post.thumbnail || undefined}
                                 tags={post.is_secret ? ['🔒 비밀글', ...post.tags] : post.tags}
                                 index={index}
                             />
