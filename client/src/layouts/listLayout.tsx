@@ -796,7 +796,7 @@ const ListLayout: React.FC = () => {
                                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <h3 className={`font-semibold text-gray-900 dark:text-white transition-colors line-clamp-3 sm:line-clamp-2 wrap-anywhere text-[15px] ${post.is_secret
+                                            <h3 className={`font-semibold text-gray-900 dark:text-white transition-colors line-clamp-3 sm:line-clamp-2 [word-break:keep-all] wrap-anywhere text-lg leading-7 ${post.is_secret
                                                 ? 'group-hover:text-amber-600 dark:group-hover:text-amber-400'
                                                 : 'group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
                                                 }`}>
@@ -813,6 +813,12 @@ const ListLayout: React.FC = () => {
                                                 </span>
                                             )}
                                         </div>
+
+                                        {post.excerpt && (
+                                            <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300 line-clamp-2 wrap-anywhere">
+                                                {post.excerpt}
+                                            </p>
+                                        )}
 
                                         {/* 태그 */}
                                         <div className="flex flex-wrap items-center gap-2 mt-2">

@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from typing import Optional
 from .base import Base
+from services.post_excerpt import strip_markdown
 
 
 class Post(Base):
@@ -124,5 +125,7 @@ class Post(Base):
                 img.to_dict() for img in (self.images or [])
                 if img.deleted_at is None
             ]
+        else:
+            data["excerpt"] = (self.excerpt or "").strip() or strip_markdown(self.content)
 
         return data

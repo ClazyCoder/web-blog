@@ -55,7 +55,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
 
             {/* 본문 */}
             <div className="flex flex-1 flex-col p-5">
-                <h3 className="font-semibold text-gray-900 dark:text-white text-[15px] line-clamp-2 mb-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                <h3 className="font-semibold text-gray-900 dark:text-white text-lg leading-7 line-clamp-3 mb-2 [word-break:keep-all] wrap-anywhere group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                     <Link to={`/board/${id}`} className="post-card-link">
                         {title}
                     </Link>
