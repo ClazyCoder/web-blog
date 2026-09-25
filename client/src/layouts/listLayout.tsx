@@ -790,10 +790,10 @@ const ListLayout: React.FC = () => {
                                     }`}
                                 style={{ animationDelay: `${index * 50}ms` }}
                             >
-                                <div className="flex items-start justify-between gap-4">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <h3 className={`font-semibold text-gray-900 dark:text-white transition-colors line-clamp-1 text-[15px] ${post.is_secret
+                                            <h3 className={`font-semibold text-gray-900 dark:text-white transition-colors line-clamp-3 sm:line-clamp-2 wrap-anywhere text-[15px] ${post.is_secret
                                                 ? 'group-hover:text-amber-600 dark:group-hover:text-amber-400'
                                                 : 'group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
                                                 }`}>
@@ -828,7 +828,7 @@ const ListLayout: React.FC = () => {
                                     </div>
 
                                     {/* 날짜 + 조회수 */}
-                                    <div className="flex flex-col items-end gap-1 shrink-0 text-xs text-gray-400 dark:text-gray-500">
+                                    <div className="flex items-center gap-3 sm:flex-col sm:items-end sm:gap-1 shrink-0 text-xs text-gray-400 dark:text-gray-500">
                                         <span>{formatDate(post.created_at)}</span>
                                         <span className="flex items-center gap-1">
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
