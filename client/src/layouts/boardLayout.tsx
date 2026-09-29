@@ -24,12 +24,11 @@ interface PostItem {
 
 const HomeIntro = () => (
     <section className="mb-8 border-b border-gray-200 pb-8 pt-2 dark:border-gray-700 sm:mb-10 sm:pb-10" aria-labelledby="home-title">
-        <p className="mb-3 text-sm font-semibold text-emerald-700 dark:text-emerald-300">AI · 개발 · 홈랩</p>
         <h1 id="home-title" className="max-w-2xl text-3xl font-bold leading-tight tracking-tight text-gray-900 dark:text-white sm:text-4xl [word-break:keep-all] wrap-anywhere">
-            직접 만들고 운영하며 남긴 기술 기록
+            나중에 내가 다시 찾아보려고 쓰는 블로그
         </h1>
         <p className="mt-4 max-w-xl text-base leading-7 text-gray-600 dark:text-gray-300 [word-break:keep-all]">
-            모델 실험부터 홈랩 구축까지, 구현 과정과 문제를 해결한 방법을 정리합니다.
+            같은 삽질 두 번 하기 싫어서 씁니다.
         </p>
         <nav aria-label="주제별 글" className="mt-5 flex flex-wrap gap-2">
             {['LLM', 'MLOps', 'Homelab', 'Dev'].map(tag => (
