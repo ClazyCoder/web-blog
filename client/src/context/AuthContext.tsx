@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import type { ReactNode } from 'react';
 import axios from 'axios';
 import api from '../utils/api';
@@ -85,15 +85,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const logout = async () => {
-        try {
-            // 서버에 로그아웃 요청 (HttpOnly 쿠키 제거)
-            await api.post('/api/auth/logout');
-        } catch (error) {
-            console.error('Logout error:', error);
-        } finally {
-            setUser(null);
-            clearSessionHint();
-        }
+        // 서버가 HttpOnly 쿠키 제거를 확인한 뒤에만 로그인 상태를 해제한다.
+        await api.post('/api/auth/logout');
+        clearSessionHint();
+        // 라우터 이동과 함께 반영해 이전 페이지의 인증 효과가 이동을 덮어쓰지 않게 한다.
+        startTransition(() => setUser(null));
     };
 
     return (

@@ -9,6 +9,9 @@ const Header: React.FC = () => {
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [logoutError, setLogoutError] = useState(false);
+    const logoutPending = useRef(false);
     const navigate = useNavigate();
     const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -41,12 +44,23 @@ const Header: React.FC = () => {
         setShowUserMenu(false);
     };
 
-    const handleLogout = () => {
-        if (!confirmNavigation()) return;
-        logout();
-        setShowUserMenu(false);
-        setIsMobileMenuOpen(false);
-        navigate('/');
+    const handleLogout = async () => {
+        if (logoutPending.current || !confirmNavigation()) return;
+        logoutPending.current = true;
+        setIsLoggingOut(true);
+        setLogoutError(false);
+
+        try {
+            await logout();
+            setShowUserMenu(false);
+            setIsMobileMenuOpen(false);
+            navigate('/');
+        } catch {
+            setLogoutError(true);
+        } finally {
+            logoutPending.current = false;
+            setIsLoggingOut(false);
+        }
     };
 
     const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -170,12 +184,13 @@ const Header: React.FC = () => {
                                         <div className="p-1.5">
                                             <button
                                                 onClick={handleLogout}
-                                                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-colors"
+                                                disabled={isLoggingOut}
+                                                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                                 </svg>
-                                                로그아웃
+                                                {isLoggingOut ? '로그아웃 중...' : '로그아웃'}
                                             </button>
                                         </div>
                                     </div>
@@ -297,12 +312,13 @@ const Header: React.FC = () => {
                                 </div>
                                 <button
                                     onClick={handleLogout}
-                                    className="flex items-center gap-3 w-full py-3 px-4 text-[15px] font-medium text-gray-300 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+                                    disabled={isLoggingOut}
+                                    className="flex items-center gap-3 w-full py-3 px-4 text-[15px] font-medium text-gray-300 hover:text-white hover:bg-white/5 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                     </svg>
-                                    로그아웃
+                                    {isLoggingOut ? '로그아웃 중...' : '로그아웃'}
                                 </button>
                             </>
                         ) : (
@@ -317,6 +333,20 @@ const Header: React.FC = () => {
                     </div>
                 </div>
             </div>
+            {logoutError && (
+                <div role="alert" className="relative z-40 border-t border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-gray-900 dark:text-red-300">
+                    <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
+                        <p>로그아웃을 확인하지 못했습니다. 로그인 상태가 남아 있을 수 있으니 다시 시도해 주세요.</p>
+                        <button
+                            onClick={handleLogout}
+                            disabled={isLoggingOut}
+                            className="shrink-0 rounded-lg border border-current px-3 py-2 font-medium hover:bg-red-100 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            다시 시도
+                        </button>
+                    </div>
+                </div>
+            )}
         </header>
     );
 };
