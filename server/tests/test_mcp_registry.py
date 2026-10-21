@@ -58,6 +58,27 @@ def test_fresh_provider_reads_db_without_env_and_creation_is_idempotent(mcp_api)
     asyncio.run(check())
 
 
+def test_same_name_registrations_have_independent_authorization_status(mcp_api):
+    c = mcp_api
+    other = c.post('/register', json=registration('https://client.example/callback',
+        client_name='Test client')).json()['client_id']
+    def statuses():
+        return {row['client_id']: row['authorization_status'] for row in info(c)['clients']}
+    assert statuses() == {'test-client': 'registered_only', other: 'registered_only'}
+    oauth(c, ['blog:read'])
+    oauth(c, ['blog:read'])
+    assert statuses() == {'test-client': 'authorized', other: 'registered_only'}
+    # Revoking one of several grants must not hide another valid consent.
+    connections = c.get('/api/mcp/admin').json()['connections']
+    assert len(connections) == 2
+    for index, connection in enumerate(connections):
+        current = next(row for row in c.get('/api/mcp/admin').json()['connections'] if row['id'] == connection['id'])
+        assert c.post('/api/mcp/admin/connections/' + connection['id'] + '/revoke', data={
+            'csrf': current['csrf'], 'confirm': 'revoke'}).status_code == 200
+        assert statuses()['test-client'] == ('authorized' if index == 0 else 'registered_only')
+    assert statuses()[other] == 'registered_only'
+
+
 def test_administration_requires_browser_origin_csrf_password_and_explicit_action(mcp_api):
     c = mcp_api
     assert c.get('/api/mcp/admin/clients').status_code == 401

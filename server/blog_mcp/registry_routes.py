@@ -22,13 +22,14 @@ def creation_context(ident):
     return SimpleNamespace(id=ident, data={"purpose": "create-oauth-client"})
 
 
-def public_client(row, session):
+def public_client(row, session, authorized):
     # Explicit projection: neither encrypted nor plaintext secrets leave this API.
     data = row.data
     return {"client_id": row.client_id, "client_name": data.get("client_name", ""),
             "redirect_uris": data.get("redirect_uris", []), "scopes": data.get("scope", "").split(),
             "auth_method": data.get("token_endpoint_auth_method", "none"),
             "source": "manual" if row.kind == "managed_client" else "automatic",
+            "authorization_status": "authorized" if authorized else "registered_only",
             "disabled": row.consumed, "expires_at": row.expires_at if row.kind == "client" else None,
             "csrf": csrf(context(row), session, int(time.time()) + 600)}
 
@@ -50,8 +51,11 @@ def build_registry_routes(settings):
         rows = (await db.scalars(select(MCPOAuth).where(MCPOAuth.kind.in_(registry.CLIENT_KINDS),
             MCPOAuth.consumed.is_(False)).order_by(MCPOAuth.client_id).limit(
                 registry.MAX_MANAGED_CLIENTS + storage.MAX_CLIENTS))).all()
+        authorized_ids = set((await db.scalars(select(MCPOAuth.client_id).where(
+            MCPOAuth.kind == "grant", MCPOAuth.consumed.is_(False), MCPOAuth.expires_at > int(time.time()),
+            MCPOAuth.client_id.in_([row.client_id for row in rows])).distinct())).all())
         ident = str(uuid.uuid4())
-        return {"clients": [public_client(row, session) for row in rows], "create_id": ident,
+        return {"clients": [public_client(row, session, row.client_id in authorized_ids) for row in rows], "create_id": ident,
                 "csrf": csrf(context(creation_context(ident)), session, int(time.time()) + 600)}
 
     @router.post("")

@@ -79,6 +79,8 @@ def test_admin_does_not_report_consent_as_token_issuance(mcp_api):
     response = c.post(url, data={'csrf': csrf_from(c.get(url)), 'decision': 'allow',
         'scope': 'blog:read', 'password': 'test-password'}, follow_redirects=False)
     assert c.get('/api/mcp/admin').json()['connections'][0]['status'] == 'awaiting_exchange'
+    # Consent is already granted even though the client has not exchanged code.
+    assert c.get('/api/mcp/admin/clients').json()['clients'][0]['authorization_status'] == 'authorized'
     code = parse_qs(urlsplit(response.headers['location']).query)['code'][0]
     form = {'client_id': 'test-client', 'grant_type': 'authorization_code', 'code': code,
         'code_verifier': verifier, 'redirect_uri': query['redirect_uri']}
@@ -92,6 +94,13 @@ def test_admin_does_not_report_consent_as_token_issuance(mcp_api):
             await db.commit()
     asyncio.run(expire())
     assert c.get('/api/mcp/admin').json()['connections'][0]['status'] == 'incomplete'
+    assert c.get('/api/mcp/admin/clients').json()['clients'][0]['authorization_status'] == 'authorized'
+    async def expire_grant():
+        async with c.sessions() as db:
+            await db.execute(update(MCPOAuth).where(MCPOAuth.kind == 'grant').values(expires_at=1))
+            await db.commit()
+    asyncio.run(expire_grant())
+    assert c.get('/api/mcp/admin/clients').json()['clients'][0]['authorization_status'] == 'registered_only'
 
 
 def test_admin_reads_are_not_throttled_but_still_require_login(mcp_api, monkeypatch):

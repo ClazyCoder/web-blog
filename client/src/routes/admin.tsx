@@ -24,6 +24,7 @@ export default function Admin() {
     const navigate = useNavigate();
     const [tab, setTab] = useState<Tab>('requests');
     const [mcp, setMcp] = useState<MCP | null>(null);
+    const [registryRefreshVersion, setRegistryRefreshVersion] = useState(0);
     const [disabled, setDisabled] = useState(false);
     const [stats, setStats] = useState<Stats | null>(null);
     const [images, setImages] = useState<ImageItem[]>([]);
@@ -46,7 +47,7 @@ export default function Admin() {
             api.get<{ images: ImageItem[] }>('/api/upload/admin/orphans/list'),
         ]);
         const [mcpResult, statsResult, imagesResult] = results;
-        if (mcpResult.status === 'fulfilled') { setMcp(mcpResult.value.data); setDisabled(false); }
+        if (mcpResult.status === 'fulfilled') { setMcp(mcpResult.value.data); setDisabled(false); setRegistryRefreshVersion(value => value + 1); }
         else if (axios.isAxiosError(mcpResult.reason) && mcpResult.reason.response?.status === 404) { setDisabled(true); setMcp(null); }
         else { setMcp(null); setError('MCP 정보를 불러오지 못했습니다. 새로고침 후 다시 확인해 주세요.'); }
         if (statsResult.status === 'fulfilled') setStats(statsResult.value.data);
@@ -107,7 +108,7 @@ export default function Admin() {
             <div className="admin-pagination"><button disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - 50))}>이전</button><span>{offset / 50 + 1}페이지 · 최대 50개</span><button disabled={mcp.requests.length < 50 || loading} onClick={() => setOffset(offset + 50)}>다음</button></div>
         </section>}
         {tab === 'connections' && mcp && <section>
-            <McpClients resource={mcp.resource} onChanged={refresh} />
+            <McpClients resource={mcp.resource} refreshVersion={registryRefreshVersion} onChanged={refresh} />
             <div className="admin-toolbar"><div><h2>연결 진행 상태·허용된 권한</h2><p>앱 등록과 권한 동의만으로 연결이 완료되지는 않습니다. 클라이언트가 인증 코드를 교환해야 토큰이 발급됩니다.</p></div></div>
             {mcp.connections.length === 0 ? <div className="admin-empty">허용된 연결이 없습니다. MCP 클라이언트에서 연결을 시작해 주세요.</div> : mcp.connections.map(connection => <article className="admin-connection" key={connection.id}><div><h3>{connection.client_id}</h3><span className="admin-badge">{connection.status === 'token_issued' ? '토큰 발급 완료' : connection.status === 'awaiting_exchange' ? '클라이언트 인증 코드 교환 대기' : '유효한 토큰 없음 · 재연결 필요'}</span><p>{connection.status === 'token_issued' ? `권한 동의 기한: ${date(connection.expires_at)}` : '클라이언트에서 연결이 완료되지 않았다면 연결 절차를 다시 시작해 주세요.'}</p><div className="admin-scopes">{connection.scopes.map(scope => <span key={scope}>{scopeLabel[scope] ?? scope}</span>)}</div></div><button onClick={() => setConfirmation({ kind: 'revoke', connection })} disabled={busy}>연결 해제</button></article>)}
             <p className="admin-muted">연결을 해제하면 해당 토큰과 승인 대기 요청이 즉시 무효화됩니다. 이미 실행한 변경은 유지됩니다.</p>

@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import api from '../utils/api';
 
-interface Client { client_id: string; client_name: string; redirect_uris: string[]; scopes: string[]; auth_method: string; source: 'manual' | 'automatic'; csrf: string }
+interface Client { client_id: string; client_name: string; redirect_uris: string[]; scopes: string[]; auth_method: string; source: 'manual' | 'automatic'; authorization_status: 'registered_only' | 'authorized'; csrf: string }
 interface Registry { clients: Client[]; create_id: string; csrf: string }
 type Operation = { action: 'create' | 'update' | 'delete' | 'rotate'; client?: Client };
 const labels: Record<string, string> = { 'blog:read': '공개 글 읽기', 'blog:read_private': '비공개 글 읽기', 'blog:propose': '글 변경 제안', 'images:read': '공개 이미지 읽기', 'images:read_private': '비공개 이미지 읽기', 'images:propose': '이미지 변경 제안' };
 const verbs = { create: '클라이언트 등록', update: '설정 저장 및 기존 연결 해제', delete: '등록 삭제 및 모든 연결 해제', rotate: '비밀값 재발급 및 기존 연결 해제' };
 
-export default function McpClients({ resource, onChanged }: { resource: string; onChanged: () => Promise<void> }) {
+export default function McpClients({ resource, refreshVersion, onChanged }: { resource: string; refreshVersion: number; onChanged: () => Promise<void> }) {
     const [registry, setRegistry] = useState<Registry | null>(null);
     const [operation, setOperation] = useState<Operation | null>(null);
     const [name, setName] = useState('');
@@ -26,7 +26,7 @@ export default function McpClients({ resource, onChanged }: { resource: string; 
         try { setRegistry((await api.get<Registry>('/api/mcp/admin/clients')).data); }
         catch { setError('클라이언트 목록을 불러오지 못했습니다. 목록을 새로고침해 주세요.'); }
     }, []);
-    useEffect(() => { void refresh(); }, [refresh]);
+    useEffect(() => { void refresh(); }, [refresh, refreshVersion]);
     useEffect(() => { if (operation) dialog.current?.showModal(); else dialog.current?.close(); }, [operation]);
 
     const open = (value: Operation) => {
@@ -87,10 +87,10 @@ export default function McpClients({ resource, onChanged }: { resource: string; 
             {issued.client_secret && <><p>비밀값은 이 화면에서만 표시됩니다. 안전하게 보관해 주세요. 화면을 닫으면 다시 조회할 수 없습니다.</p><label>클라이언트 비밀값<input readOnly type="password" value={issued.client_secret} autoComplete="off" onFocus={e => e.currentTarget.select()} /></label><button onClick={() => void copy(issued.client_secret!)}>비밀값 복사</button></>}
             <button onClick={() => { setIssued(null); setMessage('발급 정보 표시를 닫았습니다.'); }}>발급 정보 닫기</button>
         </section>}
-        <div className="admin-toolbar"><div><h2>등록된 앱</h2><p>등록 정보만으로는 접근할 수 없습니다. 아래에서 연결 진행 상태와 허용된 권한을 확인해 주세요.</p></div><button disabled={busy} onClick={() => { setError(''); void refresh(); }}>목록 새로고침</button></div>
+        <div className="admin-toolbar"><div><h2>등록된 앱</h2><p>‘등록만 됨’은 현재 유효한 권한 동의가 없는 앱입니다. ‘권한 허용됨’은 유효한 동의가 있는 앱이며, 토큰 발급 상태는 아래 연결 목록에서 확인할 수 있습니다.</p></div><button disabled={busy} onClick={() => { setError(''); void refresh(); }}>목록 새로고침</button></div>
         {registry?.clients.length === 0 && <p className="admin-empty">등록된 앱이 없습니다. 위 서버 주소로 앱에서 연결을 시작해 주세요.</p>}
         {registry?.clients.map(client => <details className="mcp-client-row" key={client.client_id}>
-            <summary><strong>{client.client_name || '이름 없는 앱'}</strong><span className="admin-badge">{client.source === 'manual' ? '수동 등록' : '자동 등록 · 자체 신고 이름'}</span><span>상세·관리</span></summary>
+            <summary><strong>{client.client_name || '이름 없는 앱'}</strong><span className={`admin-badge ${client.authorization_status === 'authorized' ? 'pending' : ''}`}>{client.authorization_status === 'authorized' ? '권한 허용됨' : '등록만 됨'}</span><span className="admin-badge">{client.source === 'manual' ? '수동 등록' : '자동 등록 · 자체 신고 이름'}</span><span>상세·관리</span></summary>
             <dl><dt>클라이언트 ID</dt><dd><code>{client.client_id}</code></dd><dt>인증 방식</dt><dd>{client.auth_method === 'none' ? 'PKCE · 비밀값 없음' : 'PKCE + 클라이언트 비밀값'}</dd><dt>반환 주소</dt><dd>{client.redirect_uris.map(url => <code key={url}>{url}</code>)}</dd><dt>요청 가능한 권한</dt><dd>{client.scopes.map(s => labels[s] ?? s).join(' · ')}</dd></dl>
             <div className="mcp-client-actions">{client.source === 'manual' && <><button disabled={busy} onClick={() => open({ action: 'update', client })}>설정 수정</button>{client.auth_method !== 'none' && <button disabled={busy} onClick={() => open({ action: 'rotate', client })}>비밀값 재발급</button>}</>}
                 <button className="admin-danger" disabled={busy} onClick={() => open({ action: 'delete', client })}>등록 삭제</button></div>
