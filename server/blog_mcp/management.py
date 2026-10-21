@@ -17,6 +17,7 @@ from rate_limit import limiter
 from .authorization import token_hash
 from .review import browser_session, csrf, check_csrf, templates, secure
 from .service import audit, digest, request_status
+from .storage import lock_storage
 
 
 def context(row):
@@ -90,7 +91,7 @@ def build_management(settings, provider):
         row = await db.get(MCPOAuth, ident)
         if not row or row.kind != "consent" or row.consumed or row.expires_at <= time.time():
             raise HTTPException(410, "Consent request expired or already used")
-        if not await provider.get_client(row.client_id):
+        if not await provider.client_in_session(db, row.client_id, allow_pending=True):
             raise HTTPException(410, "OAuth client is no longer allowed")
         return row
 
@@ -116,6 +117,8 @@ def build_management(settings, provider):
             raise HTTPException(404)
         session = await browser_session(request)
         fields = await small_form(request, settings)
+        # Serialize expiry cleanup with validation and creation of the grant.
+        await lock_storage(db)
         row = await consent_row(db, consent_id)
         if not check_csrf(one(fields, "csrf"), context(row), session):
             raise HTTPException(403, "Invalid consent CSRF token")

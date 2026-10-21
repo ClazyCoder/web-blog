@@ -9,10 +9,11 @@ import time
 
 from mcp.server.auth.provider import AuthorizationCode, RefreshToken, AccessToken, TokenError, AuthorizeError, RegistrationError
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 
 from db import session as database
 from models.mcp import MCPOAuth
+from . import storage
 
 
 def token_hash(value):
@@ -40,23 +41,45 @@ class LocalOAuth:
             self.clients[client.client_id] = client
 
     async def get_client(self, client_id):
+        async with database.AsyncSessionLocal() as db:
+            return await self.client_in_session(db, client_id)
+
+    async def client_in_session(self, db, client_id, *, allow_pending=False):
         if client_id in self.clients:
             return self.clients[client_id]
-        async with database.AsyncSessionLocal() as db:
-            row = await db.get(MCPOAuth, token_hash("client:" + client_id))
-            if row and row.kind == "client" and not row.consumed:
-                client = OAuthClientInformationFull.model_validate(row.data)
-                if set(map(str, client.redirect_uris)).issubset(self.settings.registration_redirects):
-                    return client
+        row = await db.get(MCPOAuth, token_hash("client:" + client_id))
+        if row and row.kind == "client" and not row.consumed:
+            now = int(time.time())
+            if row.expires_at <= now and not await db.scalar(select(storage.live_dependencies(
+                    client_id, now, include_consent=allow_pending))):
+                return None
+            client = OAuthClientInformationFull.model_validate(row.data)
+            if set(map(str, client.redirect_uris)).issubset(self.settings.registration_redirects):
+                return client
         return None
 
     async def register_client(self, client_info):
         if (client_info.token_endpoint_auth_method != "none" or not client_info.redirect_uris
                 or not set(map(str, client_info.redirect_uris)).issubset(self.settings.registration_redirects)):
             raise RegistrationError(error="invalid_client_metadata", error_description="Only pre-allowlisted exact callback URLs and public PKCE clients may register")
+        data = client_info.model_dump(mode="json")
+        if not storage.bounded_payload(data):
+            raise RegistrationError(error="invalid_client_metadata", error_description="Client metadata exceeds the storage limit")
         async with database.AsyncSessionLocal() as db:
+            await storage.lock_storage(db)
+            now = int(time.time())
+            await storage.prune_storage(db, now)
+            count = await db.scalar(select(func.count()).select_from(MCPOAuth).where(MCPOAuth.kind == "client"))
+            if count >= storage.MAX_CLIENTS:
+                await db.commit()
+                raise RegistrationError(error="invalid_client_metadata", error_description="Client registration capacity reached; retry later")
+            clients = (await db.scalars(select(MCPOAuth).where(MCPOAuth.kind == "client"))).all()
+            for callback in set(map(str, client_info.redirect_uris)):
+                if sum(callback in row.data.get("redirect_uris", []) for row in clients) >= storage.MAX_CLIENTS_PER_CALLBACK:
+                    await db.commit()
+                    raise RegistrationError(error="invalid_client_metadata", error_description="Callback registration capacity reached; retry later")
             db.add(MCPOAuth(id=token_hash("client:" + client_info.client_id), kind="client", client_id=client_info.client_id,
-                           data=client_info.model_dump(mode="json"), expires_at=2_147_483_647))
+                           data=data, expires_at=now + storage.CLIENT_TTL))
             await db.commit()
 
     async def authorize(self, client, params):
@@ -72,9 +95,23 @@ class LocalOAuth:
         data = params.model_dump(mode="json")
         data["resource"] = self.settings.resource
         data["scopes"] = params.scopes or ["blog:read", "images:read"]
+        if not storage.bounded_payload(data):
+            raise AuthorizeError(error="invalid_request", error_description="Consent parameters exceed the storage limit")
         async with database.AsyncSessionLocal() as db:
+            await storage.lock_storage(db)
+            now = int(time.time())
+            await storage.prune_storage(db, now)
+            if not await self.client_in_session(db, client.client_id):
+                await db.commit()
+                raise AuthorizeError(error="invalid_request", error_description="Client registration expired")
+            count = await db.scalar(select(func.count()).select_from(MCPOAuth).where(MCPOAuth.kind == "consent"))
+            own = await db.scalar(select(func.count()).select_from(MCPOAuth).where(
+                MCPOAuth.kind == "consent", MCPOAuth.client_id == client.client_id))
+            if count >= storage.MAX_CONSENTS or own >= storage.MAX_CONSENTS_PER_CLIENT:
+                await db.commit()
+                raise AuthorizeError(error="temporarily_unavailable", error_description="Consent capacity reached; retry after expiry")
             db.add(MCPOAuth(id=ident, kind="consent", client_id=client.client_id, data=data,
-                           expires_at=int(time.time()) + 600))
+                           expires_at=now + 600))
             await db.commit()
         return self.settings.origin + "/api/mcp/oauth/consent/" + ident
 
@@ -140,7 +177,7 @@ class LocalOAuth:
         async with database.AsyncSessionLocal() as db:
             row = await db.get(MCPOAuth, token_hash(token))
             if (row and row.kind == "access" and not row.consumed and row.expires_at > time.time()
-                    and await active_grant(db, row.grant_id) and await self.get_client(row.client_id)):
+                    and await active_grant(db, row.grant_id) and await self.client_in_session(db, row.client_id)):
                 return AccessToken(token=token, client_id=row.client_id, expires_at=row.expires_at,
                                    claims={"iss": self.settings.origin, "grant_id": row.grant_id}, **row.data)
         return None
