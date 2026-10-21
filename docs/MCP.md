@@ -140,6 +140,29 @@ OpenAI Responses API와 Anthropic Messages MCP connector에 `/mcp` URL 및 OAuth
 
 ## 검증
 
+### 동의 후 콜백이 열리지 않는 경우
+
+동의 POST의 `303`은 서버에서 인가 코드를 생성했다는 뜻이며 클라이언트 연결 완료를 증명하지 않습니다. 동의 페이지의 CSP는 `'self'`와 **해당 요청의 검증된 콜백 출처**만 `form-action`에 허용합니다. Chromium은 폼 제출 이후 리다이렉트에도 이 정책을 적용하므로 `'self'`만 허용하면 303 이후 화면이 멈출 수 있습니다. 글·이미지 변경 승인 페이지는 계속 `'self'`만 허용합니다.
+
+MCP HTML 페이지는 `Referrer-Policy: same-origin`을 사용합니다. `no-referrer`를 HTML 폼 페이지에 적용하면 브라우저가 정상 POST의 `Origin`을 `null`로 보낼 수 있습니다. 출처 검사를 완화하는 대신 이 정책으로 동일 출처 POST를 유지하고 외부로는 Referer를 보내지 않습니다. OAuth 리다이렉트와 JSON 응답에는 `no-referrer`를 유지합니다. 앞단 프록시에서 더 제한적인 `form-action 'self'` 또는 `Referrer-Policy: no-referrer`를 HTML 응답에 추가하면 동일 문제가 재발할 수 있습니다.
+
+관리자 화면은 인증 코드 교환 대기, 토큰 발급 완료, 유효한 토큰 없음 상태를 구분합니다. 토큰 발급 완료 역시 클라이언트가 응답을 저장했다는 보장은 아닙니다. 앱 등록만으로 데이터 접근 권한은 생기지 않습니다. 이미 소비되었거나 만료된 동의 페이지를 재제출하지 말고 클라이언트에서 연결 절차를 새로 시작해야 합니다. 서버는 인가 코드를 다시 노출하거나 재사용하지 않습니다.
+
+관리자 MCP 현황·앱 목록·이미지 통계와 목록 GET은 조회 횟수 제한에서 제외합니다. 관리자 인증은 유지하며 로그인, 비밀번호 재확인이 필요한 변경 POST, OAuth/MCP 공개 진입점 제한은 유지합니다.
+
+### 브라우저 회귀 확인
+
+격리된 테스트 DB와 관리자 계정으로, 블로그와 다른 출처의 콜백 서버를 등록하여 실제 브라우저에서 확인합니다. API 테스트가 `Location`을 직접 파싱하는 것만으로는 브라우저의 CSP 차단을 발견할 수 없습니다.
+
+1. DCR → `/authorize` → 관리자 로그인 → 동의 화면을 엽니다. 앱의 PKCE verifier와 state는 콜백 서버가 보관합니다.
+2. 공개 읽기 권한을 허용하고 **브라우저가 콜백으로 이동하는지** 확인합니다. 콜백 서버에서 state 검증, `/token` 교환, `/mcp` 초기화까지 확인합니다.
+3. 새 연결에서 거절하여 콜백에 `error=access_denied`와 원래 state가 전달되고 토큰이 발급되지 않는지 확인합니다.
+4. 동의 전후 관리자 상태를 비교하고 코드 교환 전에는 토큰 발급 완료로 표시되지 않는지 확인합니다. 데스크톱과 좁은 화면에서 상태를 읽을 수 있어야 합니다.
+
+참고: [CSP form-action](https://www.w3.org/TR/CSP/#directive-form-action), [Fetch Origin 처리](https://fetch.spec.whatwg.org/#append-a-request-origin-header).
+
+### 자동 테스트
+
 ```sh
 cd server
 uv run pytest tests -q

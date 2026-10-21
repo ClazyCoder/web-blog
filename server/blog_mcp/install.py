@@ -68,7 +68,10 @@ def install_mcp(app, settings=None):
                         return JSONResponse({"error": "invalid_target"}, status_code=400)
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
-        response.headers["Referrer-Policy"] = "no-referrer"
+        # Native same-origin form submissions need a non-null Origin. Never
+        # send the consent/review URL to an external callback or other site.
+        is_html = response.headers.get("content-type", "").startswith("text/html")
+        response.headers["Referrer-Policy"] = "same-origin" if is_html else "no-referrer"
         return response
 
     app.mount("/", transport)

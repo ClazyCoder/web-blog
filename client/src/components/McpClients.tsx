@@ -87,7 +87,7 @@ export default function McpClients({ resource, onChanged }: { resource: string; 
             {issued.client_secret && <><p>비밀값은 이 화면에서만 표시됩니다. 안전하게 보관해 주세요. 화면을 닫으면 다시 조회할 수 없습니다.</p><label>클라이언트 비밀값<input readOnly type="password" value={issued.client_secret} autoComplete="off" onFocus={e => e.currentTarget.select()} /></label><button onClick={() => void copy(issued.client_secret!)}>비밀값 복사</button></>}
             <button onClick={() => { setIssued(null); setMessage('발급 정보 표시를 닫았습니다.'); }}>발급 정보 닫기</button>
         </section>}
-        <div className="admin-toolbar"><div><h2>등록된 앱</h2><p>등록 정보만으로는 접근할 수 없습니다. 실제 허용된 권한은 아래 활성 연결에서 확인해 주세요.</p></div><button disabled={busy} onClick={() => { setError(''); void refresh(); }}>목록 새로고침</button></div>
+        <div className="admin-toolbar"><div><h2>등록된 앱</h2><p>등록 정보만으로는 접근할 수 없습니다. 아래에서 연결 진행 상태와 허용된 권한을 확인해 주세요.</p></div><button disabled={busy} onClick={() => { setError(''); void refresh(); }}>목록 새로고침</button></div>
         {registry?.clients.length === 0 && <p className="admin-empty">등록된 앱이 없습니다. 위 서버 주소로 앱에서 연결을 시작해 주세요.</p>}
         {registry?.clients.map(client => <details className="mcp-client-row" key={client.client_id}>
             <summary><strong>{client.client_name || '이름 없는 앱'}</strong><span className="admin-badge">{client.source === 'manual' ? '수동 등록' : '자동 등록 · 자체 신고 이름'}</span><span>상세·관리</span></summary>

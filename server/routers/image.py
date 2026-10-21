@@ -414,7 +414,7 @@ async def delete_image(
 # ==================== 관리 엔드포인트 ====================
 
 @router.get("/admin/orphans")
-@limiter.limit("60/minute")
+@limiter.exempt
 async def get_orphan_stats(
     request: Request,
     current_user: dict = Depends(get_current_user),
@@ -488,7 +488,7 @@ async def get_orphan_stats(
 
 
 @router.get("/admin/orphans/list")
-@limiter.limit("60/minute")
+@limiter.exempt
 async def get_orphan_list(
     request: Request,
     current_user: dict = Depends(get_current_user),

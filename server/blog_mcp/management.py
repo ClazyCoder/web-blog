@@ -1,3 +1,4 @@
+import re
 import secrets
 import time
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ import auth
 from db.session import get_db
 from models.mcp import MCPOAuth, MCPRequest, MCPAudit
 from rate_limit import limiter
+from security import origin_of
 from .authorization import token_hash
 from .review import browser_session, csrf, check_csrf, templates, secure
 from .service import audit, digest, request_status
@@ -25,6 +27,19 @@ def redirect_result(uri, **values):
     parts = urlsplit(uri)
     query = parts.query + ("&" if parts.query else "") + urlencode({k: v for k, v in values.items() if v is not None})
     return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+
+
+def consent_response(response, redirect_uri):
+    # Chromium applies form-action to the POST's redirect as well. Allow only
+    # this consent's already validated callback origin, never arbitrary HTTPS.
+    # Do not interpolate a URL path/query into CSP: it may contain directives.
+    origin = origin_of(redirect_uri)
+    if not origin or not re.fullmatch(r"https?://(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(?::[0-9]+)?", origin):
+        raise HTTPException(400, "Invalid callback origin")
+    response = secure(response)
+    response.headers["Content-Security-Policy"] = response.headers["Content-Security-Policy"].replace(
+        "form-action 'self';", f"form-action 'self' {origin};")
+    return response
 
 
 async def small_form(request, settings, max_fields=16):
@@ -54,12 +69,19 @@ def build_management(settings, provider):
     router = APIRouter(prefix="/api/mcp", tags=["MCP administration"])
 
     @router.get("/admin")
-    @limiter.limit("30/minute")
+    @limiter.exempt
     async def overview(request: Request, offset: int = Query(0, ge=0), db=Depends(get_db)):
         session = await browser_session(request)
         rows = (await db.scalars(select(MCPRequest).order_by(MCPRequest.created_at.desc(), MCPRequest.id).offset(offset).limit(50))).all()
         events = (await db.scalars(select(MCPAudit).order_by(MCPAudit.occurred_at.desc(), MCPAudit.id).limit(50))).all()
         grants = (await db.scalars(select(MCPOAuth).where(MCPOAuth.kind == "grant", MCPOAuth.consumed.is_(False), MCPOAuth.expires_at > int(time.time())).limit(100))).all()
+        live_credentials = set((await db.execute(select(MCPOAuth.grant_id, MCPOAuth.kind).where(
+            MCPOAuth.grant_id.in_([g.id for g in grants]), MCPOAuth.kind.in_(("code", "access", "refresh")),
+            MCPOAuth.consumed.is_(False), MCPOAuth.expires_at > int(time.time())).distinct())).all())
+        def connection_status(grant):
+            if any((grant.id, kind) in live_credentials for kind in ("access", "refresh")):
+                return "token_issued"
+            return "awaiting_exchange" if (grant.id, "code") in live_credentials else "incomplete"
         return {"enabled": True, "resource": settings.resource, "oauth_mode": "local",
                 "requests": [{**request_status(row, settings.origin), "client_id": row.client_id,
                               "target_id": row.target_id, "created_at": row.created_at} for row in rows],
@@ -67,6 +89,7 @@ def build_management(settings, provider):
                 "events": [{"id": e.id, "at": e.occurred_at, "event": e.event, "request_id": e.request_id,
                             "details": e.details} for e in events],
                 "connections": [{"id": g.id, "client_id": g.client_id, "scopes": g.data["scopes"],
+                                 "status": connection_status(g),
                                  "expires_at": g.expires_at, "csrf": csrf(context(g), session, int(time.time()) + 600)} for g in grants]}
 
     @router.post("/admin/connections/{grant_id}/revoke")
@@ -103,9 +126,9 @@ def build_management(settings, provider):
             return secure(RedirectResponse("/login?" + urlencode({"redirect": "/api/mcp/oauth/consent/" + consent_id}), status_code=303))
         row = await consent_row(db, consent_id)
         client = await provider.client_in_session(db, row.client_id, allow_pending=True)
-        return secure(templates.TemplateResponse(request=request, name="consent.html", context={
+        return consent_response(templates.TemplateResponse(request=request, name="consent.html", context={
             "row": row, "client": client,
-            "csrf": csrf(context(row), session, min(int(time.time()) + 600, row.expires_at))}))
+            "csrf": csrf(context(row), session, min(int(time.time()) + 600, row.expires_at))}), row.data["redirect_uri"])
 
     @router.post("/oauth/consent/{consent_id}")
     @limiter.limit("5/minute")
@@ -147,8 +170,9 @@ def build_management(settings, provider):
                            data=data, expires_at=int(time.time()) + 60))
             url = redirect_result(row.data["redirect_uri"], code=code, state=row.data.get("state"))
             audit(db, "admin", "oauth_consented", client_id=row.client_id, grant_id=grant_id, scopes=scopes)
+        response = consent_response(RedirectResponse(url, status_code=303), row.data["redirect_uri"])
         await db.commit()
-        return secure(RedirectResponse(url, status_code=303))
+        return response
 
     from .registry_routes import build_registry_routes
     router.include_router(build_registry_routes(settings))

@@ -44,7 +44,7 @@ def build_registry_routes(settings):
     router = APIRouter(prefix="/admin/clients")
 
     @router.get("")
-    @limiter.limit("30/minute")
+    @limiter.exempt
     async def clients(request: Request, db=Depends(get_db)):
         session = await browser_session(request)
         rows = (await db.scalars(select(MCPOAuth).where(MCPOAuth.kind.in_(registry.CLIENT_KINDS),

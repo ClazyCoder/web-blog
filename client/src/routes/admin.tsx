@@ -9,7 +9,7 @@ import './admin.css';
 interface ImageItem { id: number; filename: string; original_filename: string; file_url: string; file_size: number; created_at: string; mcp_managed?: boolean }
 interface Stats { total_active_images: number; orphan_images: number; orphan_expired: number; soft_deleted_images: number; purgeable_images: number; policy: { orphan_ttl_hours: number; soft_delete_ttl_days: number } }
 interface Change { request_id: string; state: string; action: string; target_id: number | null; client_id: string; created_at: number; expires_at: number }
-interface Connection { id: string; client_id: string; scopes: string[]; expires_at: number; csrf: string }
+interface Connection { id: string; client_id: string; scopes: string[]; expires_at: number; csrf: string; status: 'token_issued' | 'awaiting_exchange' | 'incomplete' }
 interface Event { id: string; at: number; event: string; request_id: string | null; details: Record<string, unknown> }
 interface MCP { enabled: boolean; resource: string; oauth_mode: string; requests: Change[]; connections: Connection[]; events: Event[] }
 type Tab = 'requests' | 'connections' | 'images' | 'history';
@@ -108,8 +108,8 @@ export default function Admin() {
         </section>}
         {tab === 'connections' && mcp && <section>
             <McpClients resource={mcp.resource} onChanged={refresh} />
-            <div className="admin-toolbar"><div><h2>활성 연결·허용된 권한</h2><p>연결 해제는 해당 동의로 발급된 권한을 종료합니다. 앱 등록 자체는 유지됩니다.</p></div></div>
-            {mcp.connections.length === 0 ? <div className="admin-empty">활성 연결이 없습니다. MCP 클라이언트에서 연결을 시작해 주세요.</div> : mcp.connections.map(connection => <article className="admin-connection" key={connection.id}><div><h3>{connection.client_id}</h3><p>{date(connection.expires_at)}까지 유효</p><div className="admin-scopes">{connection.scopes.map(scope => <span key={scope}>{scopeLabel[scope] ?? scope}</span>)}</div></div><button onClick={() => setConfirmation({ kind: 'revoke', connection })} disabled={busy}>연결 해제</button></article>)}
+            <div className="admin-toolbar"><div><h2>연결 진행 상태·허용된 권한</h2><p>앱 등록과 권한 동의만으로 연결이 완료되지는 않습니다. 클라이언트가 인증 코드를 교환해야 토큰이 발급됩니다.</p></div></div>
+            {mcp.connections.length === 0 ? <div className="admin-empty">허용된 연결이 없습니다. MCP 클라이언트에서 연결을 시작해 주세요.</div> : mcp.connections.map(connection => <article className="admin-connection" key={connection.id}><div><h3>{connection.client_id}</h3><span className="admin-badge">{connection.status === 'token_issued' ? '토큰 발급 완료' : connection.status === 'awaiting_exchange' ? '클라이언트 인증 코드 교환 대기' : '유효한 토큰 없음 · 재연결 필요'}</span><p>{connection.status === 'token_issued' ? `권한 동의 기한: ${date(connection.expires_at)}` : '클라이언트에서 연결이 완료되지 않았다면 연결 절차를 다시 시작해 주세요.'}</p><div className="admin-scopes">{connection.scopes.map(scope => <span key={scope}>{scopeLabel[scope] ?? scope}</span>)}</div></div><button onClick={() => setConfirmation({ kind: 'revoke', connection })} disabled={busy}>연결 해제</button></article>)}
             <p className="admin-muted">연결을 해제하면 해당 토큰과 승인 대기 요청이 즉시 무효화됩니다. 이미 실행한 변경은 유지됩니다.</p>
         </section>}
         {tab === 'images' && <section>
