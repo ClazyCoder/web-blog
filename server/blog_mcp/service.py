@@ -292,10 +292,9 @@ async def apply_change(db, req):
 
 
 async def decide(db, req, decision, settings):
-    if settings.local:
-        from .authorization import active_grant, LocalOAuth
-        if not await LocalOAuth(settings).get_client(req.client_id) or not await active_grant(db, req.grant_id, lock=True):
-            raise HTTPException(409, "OAuth connection revoked or expired; create a new proposal")
+    from .authorization import active_grant, LocalOAuth
+    if not await LocalOAuth(settings).get_client(req.client_id) or not await active_grant(db, req.grant_id, lock=True):
+        raise HTTPException(409, "OAuth connection revoked or expired; create a new proposal")
     # Conditional write serializes competing decisions on PostgreSQL AND SQLite.
     won = await db.execute(update(MCPRequest).where(MCPRequest.id == req.id, MCPRequest.state == "pending")
                            .values(state="deciding").execution_options(synchronize_session=False))
@@ -304,7 +303,7 @@ async def decide(db, req, decision, settings):
         await db.rollback()
         return request_status(await get_request(db, ident), settings.origin)
     await db.refresh(req)
-    if req.expires_at <= int(time.time()) or (not settings.local and req.client_id not in settings.clients):
+    if req.expires_at <= int(time.time()):
         req.state = "expired"
     elif decision == "reject":
         req.state = "rejected"

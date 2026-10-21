@@ -1,6 +1,3 @@
-import hashlib
-import hmac
-import json
 import secrets
 import time
 from types import SimpleNamespace
@@ -63,7 +60,7 @@ def build_management(settings, provider):
         rows = (await db.scalars(select(MCPRequest).order_by(MCPRequest.created_at.desc(), MCPRequest.id).offset(offset).limit(50))).all()
         events = (await db.scalars(select(MCPAudit).order_by(MCPAudit.occurred_at.desc(), MCPAudit.id).limit(50))).all()
         grants = (await db.scalars(select(MCPOAuth).where(MCPOAuth.kind == "grant", MCPOAuth.consumed.is_(False), MCPOAuth.expires_at > int(time.time())).limit(100))).all()
-        return {"enabled": True, "resource": settings.resource, "oauth_mode": "local" if settings.local else "external",
+        return {"enabled": True, "resource": settings.resource, "oauth_mode": "local",
                 "requests": [{**request_status(row, settings.origin), "client_id": row.client_id,
                               "target_id": row.target_id, "created_at": row.created_at} for row in rows],
                 "next_offset": offset + len(rows),
@@ -98,8 +95,6 @@ def build_management(settings, provider):
     @router.get("/oauth/consent/{consent_id}")
     @limiter.limit("30/minute")
     async def consent(request: Request, consent_id: str, db=Depends(get_db)):
-        if not settings.local:
-            raise HTTPException(404)
         try:
             session = await browser_session(request)
         except HTTPException as exc:
@@ -107,14 +102,14 @@ def build_management(settings, provider):
                 raise
             return secure(RedirectResponse("/login?" + urlencode({"redirect": "/api/mcp/oauth/consent/" + consent_id}), status_code=303))
         row = await consent_row(db, consent_id)
+        client = await provider.client_in_session(db, row.client_id, allow_pending=True)
         return secure(templates.TemplateResponse(request=request, name="consent.html", context={
-            "row": row, "csrf": csrf(context(row), session, min(int(time.time()) + 600, row.expires_at))}))
+            "row": row, "client": client,
+            "csrf": csrf(context(row), session, min(int(time.time()) + 600, row.expires_at))}))
 
     @router.post("/oauth/consent/{consent_id}")
     @limiter.limit("5/minute")
     async def consent_decide(request: Request, consent_id: str, db=Depends(get_db)):
-        if not settings.local:
-            raise HTTPException(404)
         session = await browser_session(request)
         fields = await small_form(request, settings)
         # Serialize expiry cleanup with validation and creation of the grant.
@@ -155,4 +150,6 @@ def build_management(settings, provider):
         await db.commit()
         return secure(RedirectResponse(url, status_code=303))
 
+    from .registry_routes import build_registry_routes
+    router.include_router(build_registry_routes(settings))
     return router

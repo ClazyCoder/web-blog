@@ -18,6 +18,8 @@ def install_mcp(app, settings=None):
     app.state.mcp_provider = provider
     app.include_router(build_router(settings))
     app.include_router(build_management(settings, provider))
+    from .discovery import install_discovery
+    install_discovery(app, settings, provider)
 
     @app.get("/.well-known/oauth-protected-resource/mcp")
     @app.get("/.well-known/oauth-protected-resource")

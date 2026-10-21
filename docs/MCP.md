@@ -27,24 +27,31 @@
 
 블로그 본문과 이미지 설명은 `untrusted_content`로 반환합니다. 승인 화면은 HTML을 이스케이프하고 스크립트·프레임·외부 리소스를 제한합니다. 범용 URL 요청·SQL·셸 실행 도구는 제공하지 않습니다. 이러한 경계는 모델이 콘텐츠의 악성 지시를 따르더라도 OAuth 권한 밖의 작업이나 자체 승인을 실행하지 못하도록 구성되어 있습니다. 모델 자체의 Prompt Injection 내성은 보장하지 않습니다.
 
-## OAuth 설정
+## 서버 설정과 앱 연결
 
-`SITE_URL`은 경로 없는 공개 HTTPS origin이어야 합니다. 예: `https://blog.clazycoder.org`.
+서버 배포 설정은 기존 DB·Redis·관리자 인증 외에 공개 HTTPS 주소와 활성화 여부만 필요합니다. 클라이언트 ID, 비밀값, 콜백 목록을 환경 변수에 넣지 않습니다.
 
 ```dotenv
+SITE_URL=https://blog.clazycoder.org
 MCP_ENABLED=true
-MCP_OAUTH_MODE=local
-MCP_OAUTH_CLIENTS='[{"client_id":"blog-local-client","redirect_uris":["http://127.0.0.1:8765/callback"],"token_endpoint_auth_method":"none","scope":"blog:read images:read blog:read_private images:read_private blog:propose images:propose"}]'
-MCP_OAUTH_REGISTRATION_REDIRECTS=
 ```
 
-위 클라이언트는 로컬 개발 예시입니다. 실제 OpenAI/Anthropic 클라이언트가 제공한 client ID와 정확한 callback URI로 교체해야 합니다. 외부 callback은 HTTPS, 로컬 callback만 loopback HTTP를 허용합니다. wildcard·임의 callback 등록은 지원하지 않습니다. 공개 클라이언트는 `none`과 PKCE S256을 사용합니다. 기밀 클라이언트는 SDK가 지원하는 인증 방식과 `client_secret`을 설정할 수 있으며 비밀 값은 저장소에 커밋하지 않아야 합니다.
+1. 관리자 페이지의 **연결·권한**에서 MCP 서버 주소를 복사합니다.
+2. 사용하는 앱의 원격 MCP 연결 화면에 주소를 입력합니다. 자동 등록(DCR)을 지원하면 사전 ID 발급은 필요하지 않습니다.
+3. 앱이 여는 블로그 OAuth 화면에서 관리자 계정으로 로그인합니다. 앱 이름은 자체 신고 정보입니다. 직접 연결한 앱인지 실제 반환 주소와 함께 확인합니다.
+4. 필요한 권한만 선택하고 관리자 비밀번호로 연결에 동의합니다. 연결을 허용해도 글·이미지 변경은 건별 승인이 필요합니다.
 
-동적 등록이 필요한 클라이언트는 `MCP_OAUTH_REGISTRATION_REDIRECTS`에 신뢰할 수 있는 callback URI를 정확히 등록합니다. 그 경우에만 `/register`가 활성화됩니다. 자동으로 알려지지 않은 callback을 신뢰하거나 외부 메타데이터 URL을 가져오지 않습니다. Client ID Metadata Document 방식은 현재 지원하지 않습니다.
+앱이 수동 ID/비밀값을 요구하면 **앱에서 클라이언트 ID·비밀값을 요구하나요? → 수동 클라이언트 등록**을 사용합니다. 해당 앱이 안내한 정확한 반환 주소와 요청 가능한 권한 상한을 입력합니다. 비밀값을 보관할 수 없는 공개 클라이언트는 `none`+PKCE, 기밀 클라이언트는 `client_secret_post`+PKCE를 사용합니다. 공개 클라이언트도 PKCE S256은 필수입니다. `client_secret_basic`, CIMD, client_credentials, implicit grant는 지원하거나 광고하지 않습니다.
+
+자동 등록과 수동 등록은 같은 검증을 사용합니다. HTTPS 또는 loopback HTTP 콜백을 최대 10개 허용하며, 사용자 정보·fragment·wildcard·역슬래시·제어 문자가 있는 주소는 거절합니다. 등록은 접근 승인이나 신원 검증이 아닙니다. 이름과 외부 URI는 신뢰하지 않으며 로고·메타데이터를 서버가 다운로드하지 않습니다. 등록 직후에는 액세스 토큰이 없고 관리자 동의 없이 콘텐츠를 읽을 수 없습니다. DCR의 scope 생략은 서버가 지원하는 scope를 요청 가능한 상한으로 등록합니다. 이것은 권한 부여가 아닙니다. OAuth 연결 요청에서 scope를 생략하면 등록된 공개 읽기 범위만 요청하고, 실제 토큰에는 사용자가 동의한 범위만 포함합니다. grant_types 생략은 authorization_code만 허용합니다. refresh_token을 요청한 클라이언트에만 갱신 토큰을 발급합니다.
+
+등록부와 활성 연결은 DB에서 별도로 관리합니다. 수동 등록은 최대 100개이며 재시작 후에도 유지됩니다. 설정 수정·비밀값 재발급·등록 삭제는 같은 트랜잭션에서 해당 클라이언트의 모든 연결과 미처리 동의를 폐기합니다. 이 변경으로 기존 토큰과 대기 중 변경 승인도 사용할 수 없으며, 다시 사용하려면 새로 연결해야 합니다. 자동 등록 메타데이터는 수정하지 않으며 앱에서 재연결합니다. **연결 해제**는 특정 동의의 권한만 폐기하고 앱 등록 자체는 유지합니다.
+
+관리 API는 관리자 쿠키, 동일 출처, CSRF, 명시적인 작업 종류와 비밀번호 재확인을 요구합니다. 조회 응답에는 비밀값을 포함하지 않습니다. 생성·재발급 시 한 번 반환되는 비밀값은 안전하게 보관합니다. 저장 시 기존 `SECRET_KEY`에서 용도별로 파생한 Fernet 키로 암호화하며, DB 단독 유출에 대비한 보호입니다. DB와 서버 키가 함께 유출되면 보호되지 않습니다. `SECRET_KEY` 변경 시 비밀값을 사용하는 등록은 재발급 또는 재등록이 필요합니다. 응답을 잃어버린 경우 목록에서 상태를 확인하고 비밀값을 재발급합니다. 같은 생성 확인 정보로 재시도해도 등록을 중복 생성하지 않습니다.
 
 익명 OAuth 저장량은 IP 제한과 별도로 제한합니다. 동의 요청은 전체 100개·클라이언트별 10개, 동적 등록은 전체 100개·각 callback별 10개까지 허용하며, 여러 callback을 등록하면 각각의 한도를 적용합니다. 저장할 동의 파라미터와 클라이언트 메타데이터는 UTF-8 JSON 기준 각각 4 KiB 이하입니다. 초과 시 OAuth 오류를 반환하며 새 레코드를 저장하지 않습니다. 동시 요청도 PostgreSQL 트랜잭션 잠금(SQLite 개발 환경은 즉시 쓰기 잠금)으로 동일한 한도를 공유합니다.
 
-사용하지 않은 동적 등록은 24시간 후 만료됩니다. 진행 중인 동의 절차는 완료할 수 있으며 활성 연결이 있는 등록은 연결 만료·해제 전까지 유지합니다. 활성 연결이 없는 만료 등록으로 새 동의 절차를 시작하려면 다시 등록해야 합니다. 만료·처리 완료 동의 요청과 의존성이 없는 만료 등록은 서버 시작 시, 새 요청 저장 전, 이후 60초 간격으로 정리합니다. 이전 버전의 장기 등록에는 최초 정리 시 24시간의 유예 기간을 부여합니다. 정적 설정 클라이언트에는 등록 만료를 적용하지 않습니다.
+사용하지 않은 동적 등록은 24시간 후 만료됩니다. 진행 중인 동의 절차는 완료할 수 있으며 활성 연결이 있는 등록은 연결 만료·해제 전까지 유지합니다. 활성 연결이 없는 만료 등록으로 새 동의 절차를 시작하려면 다시 등록해야 합니다. 만료·처리 완료 동의 요청과 의존성이 없는 만료 등록은 서버 시작 시, 새 요청 저장 전, 이후 60초 간격으로 정리합니다. 이전 버전의 장기 등록에는 최초 정리 시 24시간의 유예 기간을 부여합니다. 관리자 수동 등록에는 등록 만료를 적용하지 않습니다. 익명 한도 고갈은 신규 등록을 거절하므로 가용성 공격이 완전히 사라지는 것은 아닙니다. 기존 연결을 퇴출하여 자리를 만들지는 않습니다.
 
 | 경로 | 용도 |
 | --- | --- |
@@ -52,6 +59,8 @@ MCP_OAUTH_REGISTRATION_REDIRECTS=
 | `/.well-known/oauth-protected-resource/mcp` | 리소스·권한 서버·scope 발견 |
 | `/.well-known/oauth-authorization-server` | OAuth 서버 메타데이터 |
 | `/authorize`, `/token`, `/revoke` | 코드+PKCE 인가, 토큰 발급·회전, 연결 취소 |
+| `/register` | 등록 후에도 별도 관리자 동의가 필요한 표준 DCR |
+| `/api/mcp/admin/clients` | 브라우저 전용 클라이언트 목록·등록·수정·재발급·삭제 |
 | `/api/mcp/oauth/consent/{id}` | 사용자 전용 권한 동의 화면 |
 | `/admin` | 승인 요청, 연결·권한, 이미지, 처리 이력 |
 
@@ -68,11 +77,17 @@ MCP_OAUTH_REGISTRATION_REDIRECTS=
 
 권한 동의 화면에서는 공개 읽기만 기본 선택합니다. 연결된 이미지가 있는 글을 바꾸려면 이미지의 비공개 읽기·변경 제안 권한도 필요합니다. 글에 연결된 이미지를 바꾸려면 글의 비공개 읽기·변경 제안 권한도 필요합니다. 권한 부족 시 자동 확장하지 않습니다.
 
-외부 OAuth가 이미 있는 경우 `MCP_OAUTH_MODE=external`, `MCP_OAUTH_ISSUER`, `MCP_OAUTH_JWKS_URL`, `MCP_OAUTH_ADMIN_SUBJECT`, `MCP_OAUTH_CLIENT_IDS`로 RS256 JWT 검증 모드를 선택할 수 있습니다. issuer·audience(`/mcp` URL)·subject·client·scope·만료·jti를 검증하며 수명은 최대 15분입니다. 외부 토큰의 원격 폐기 상태를 조회하지 않으므로 즉시 연결 해제와 관리자 연결 목록은 로컬 OAuth 모드에서만 제공됩니다. 기본 권장 구성은 로컬 모드입니다.
+## 이전 구현에서 전환
+
+환경 변수 기반 클라이언트 및 콜백 등록은 제거되었습니다. 이전 `MCP_OAUTH_CLIENTS`, `MCP_OAUTH_REGISTRATION_REDIRECTS` 값을 자동으로 가져오거나 재시작 때 복원하지 않습니다. 기존 환경 변수 정적 클라이언트는 관리자 화면에서 새 ID를 발급하거나 앱의 자동 등록을 통해 **다시 연결해야 합니다**. 기존 DB 동적 등록과 그 유효한 연결은 유지됩니다. 글·이미지·감사 기록은 삭제하지 않습니다.
+
+외부 JWT 검증 모드는 로컬 연결과 같은 즉시 폐기를 보장하지 못하므로 제거했습니다. 해당 모드를 사용했다면 로컬 OAuth로 다시 연결해야 합니다. 직접 서버 실행 시 `MCP_OAUTH_MODE=external`이 남아 있으면 전환 안내 오류로 시작을 중단합니다. Compose는 더 이상 이전 OAuth 환경 변수를 전달하지 않습니다. 외부 IdP 연동은 폐기·동의 수명까지 통합하는 별도 설계가 필요합니다.
+
+상세 설계와 검증 기준은 [MCP 보안 설계](MCP-SECURITY-DESIGN.md)를 참고해 주세요.
 
 ## 설치와 배포
 
-1. 기존 DB와 uploads 볼륨을 백업합니다. `.env.example`을 참고하여 origin, OAuth 클라이언트, Redis 인증을 설정합니다.
+1. 기존 DB와 uploads 볼륨을 백업합니다. `.env.example`을 참고하여 공개 origin, MCP 활성화, Redis 인증을 설정합니다. 클라이언트 등록 설정은 필요하지 않습니다.
 2. `server`에서 `uv sync --frozen --extra dev`, `uv run alembic upgrade head`로 의존성과 마이그레이션을 적용합니다. 신규 revision은 `7e9a1c2d4f60`입니다. 기존 데이터는 유지하며 MCP 테이블 3개와 이미지 보존 플래그를 추가합니다.
 3. 기존 배포 방식으로 백엔드와 프론트엔드를 함께 빌드합니다. Docker entrypoint도 기존 방식대로 migration을 수행합니다.
 4. nginx의 `/mcp`, OAuth 및 well-known 경로를 백엔드로 전달합니다. 저장소 nginx 설정에 반영되어 있습니다. Cloudflare가 해당 기계 클라이언트 경로에 브라우저 챌린지·HTML 인증 페이지·캐시를 반환하지 않도록 별도로 확인해야 합니다. 관리자 승인 화면은 기존 브라우저 인증을 유지합니다.

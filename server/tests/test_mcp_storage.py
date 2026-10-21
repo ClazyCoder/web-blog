@@ -1,7 +1,6 @@
 """OAuth persistence limits through HTTP and the shared database boundary."""
 import asyncio
 import time
-from dataclasses import replace
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -83,7 +82,6 @@ def test_registration_capacity_metadata_and_reclamation(mcp_api):
 def test_every_callback_and_global_registration_budget(mcp_api, monkeypatch):
     c = mcp_api
     a, b = "https://registered.example/callback", "https://second.example/callback"
-    c.provider.settings = replace(c.provider.settings, registration_redirects=(a, b))
     monkeypatch.setattr(storage, "MAX_CLIENTS_PER_CALLBACK", 1)
     assert c.post("/register", json=registration(a)).status_code == 201
     assert c.post("/register", json=registration(redirect_uris=[b, a])).status_code == 400

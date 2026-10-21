@@ -50,9 +50,8 @@ async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(start_cleanup_scheduler())
     async with AsyncExitStack() as stack:
         if getattr(app.state, "mcp_server", None):
-            if app.state.mcp_provider.settings.local:
-                from blog_mcp.storage import maintenance
-                await stack.enter_async_context(maintenance())
+            from blog_mcp.storage import maintenance
+            await stack.enter_async_context(maintenance())
             await stack.enter_async_context(app.state.mcp_server.session_manager.run())
         yield
     # Shutdown: 백그라운드 태스크 정리

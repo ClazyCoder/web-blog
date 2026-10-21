@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/useAuth';
 import api from '../utils/api';
+import McpClients from '../components/McpClients';
 import './admin.css';
 
 interface ImageItem { id: number; filename: string; original_filename: string; file_url: string; file_size: number; created_at: string; mcp_managed?: boolean }
@@ -99,15 +100,15 @@ export default function Admin() {
         {error && <p role="alert" className="admin-alert">{error}</p>}
         {message && <p role="status" className="admin-notice">{message}</p>}
         {loading && <p role="status" className="admin-muted">최신 상태를 불러오는 중…</p>}
-        {disabled && tab !== 'images' && <section className="admin-empty"><h2>MCP가 비활성화되어 있습니다</h2><p>서버의 MCP와 OAuth 클라이언트 설정을 완료한 뒤 다시 확인해 주세요. 이미지 관리는 사용할 수 있습니다.</p><button onClick={() => setTab('images')}>이미지 관리 열기</button></section>}
+        {disabled && tab !== 'images' && <section className="admin-empty"><h2>MCP가 비활성화되어 있습니다</h2><p>서버에서 공개 HTTPS 주소와 MCP 활성화를 설정한 뒤 다시 확인해 주세요. 클라이언트 사전 등록은 필요하지 않습니다. 이미지 관리는 사용할 수 있습니다.</p><button onClick={() => setTab('images')}>이미지 관리 열기</button></section>}
         {tab === 'requests' && mcp && <section aria-label="승인 요청 목록">
             <div className="admin-toolbar"><div><h2>변경 승인 요청</h2><p>연결을 허용한 후에도 글과 이미지 변경은 건별로 승인해야 합니다.</p></div><label>표시 <select value={filter} onChange={e => setFilter(e.target.value)}><option value="pending">승인 대기</option><option value="all">전체 상태</option><option value="executed">실행 완료</option><option value="rejected">거절</option><option value="stale">원본 변경</option><option value="expired">만료</option></select></label></div>
             {visible.length === 0 ? <div className="admin-empty"><h3>표시할 요청이 없습니다</h3><p>AI가 제안한 변경 사항이 여기에 표시됩니다.</p></div> : <div className="admin-rows">{visible.map(r => <article key={r.request_id} className="admin-request"><div><span className={`admin-badge ${r.state === 'pending' ? 'pending' : ''}`}>{stateLabel[r.state] ?? r.state}</span><h3>{actionLabel[r.action] ?? r.action}{r.target_id ? ` · #${r.target_id}` : ''}</h3><p>{r.client_id} · {date(r.created_at)}</p>{r.state === 'pending' && <small>{date(r.expires_at)}까지 검토</small>}</div><a className="admin-button" href={`/api/mcp/review/${encodeURIComponent(r.request_id)}`}>{r.state === 'pending' ? '변경 검토' : '상세 보기'} <span aria-hidden="true">↗</span></a></article>)}</div>}
             <div className="admin-pagination"><button disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - 50))}>이전</button><span>{offset / 50 + 1}페이지 · 최대 50개</span><button disabled={mcp.requests.length < 50 || loading} onClick={() => setOffset(offset + 50)}>다음</button></div>
         </section>}
         {tab === 'connections' && mcp && <section>
-            <div className="admin-toolbar"><div><h2>MCP 연결·권한</h2><p>클라이언트에 아래 서버 주소를 등록한 뒤 브라우저에서 권한을 선택해 주세요.</p></div></div>
-            <div className="admin-endpoint"><span>서버 주소</span><code>{mcp.resource}</code><span className="admin-badge">{mcp.oauth_mode === 'local' ? '블로그 OAuth' : '외부 OAuth'}</span></div>
+            <McpClients resource={mcp.resource} onChanged={refresh} />
+            <div className="admin-toolbar"><div><h2>활성 연결·허용된 권한</h2><p>연결 해제는 해당 동의로 발급된 권한을 종료합니다. 앱 등록 자체는 유지됩니다.</p></div></div>
             {mcp.connections.length === 0 ? <div className="admin-empty">활성 연결이 없습니다. MCP 클라이언트에서 연결을 시작해 주세요.</div> : mcp.connections.map(connection => <article className="admin-connection" key={connection.id}><div><h3>{connection.client_id}</h3><p>{date(connection.expires_at)}까지 유효</p><div className="admin-scopes">{connection.scopes.map(scope => <span key={scope}>{scopeLabel[scope] ?? scope}</span>)}</div></div><button onClick={() => setConfirmation({ kind: 'revoke', connection })} disabled={busy}>연결 해제</button></article>)}
             <p className="admin-muted">연결을 해제하면 해당 토큰과 승인 대기 요청이 즉시 무효화됩니다. 이미 실행한 변경은 유지됩니다.</p>
         </section>}

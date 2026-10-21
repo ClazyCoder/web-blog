@@ -30,15 +30,22 @@ from models.post import Post
 from models.image import Image
 
 
+async def seed_client(sessions, client_id="test-client"):
+    from blog_mcp.registry import create_managed, ClientInput
+    async with sessions() as db:
+        await create_managed(db, client_id, ClientInput(client_name="Test client",
+            redirect_uris=["https://client.example/callback"], scopes=list(SCOPES)))
+        await db.commit()
+
+
 @pytest.fixture
 def mcp_api(api, monkeypatch):
     monkeypatch.setattr(database, "AsyncSessionLocal", api.sessions)
     monkeypatch.setattr(limiter, "enabled", False)
-    settings = Settings("https://testserver", "https://testserver", "", "admin", frozenset({"test-client"}), True,
-        ({"client_id": "test-client", "redirect_uris": ["https://client.example/callback"],
-          "scope": " ".join(SCOPES)},), ("https://registered.example/callback",))
+    settings = Settings("https://testserver")
     @asynccontextmanager
     async def lifespan(app):
+        await seed_client(api.sessions)
         async with app.state.mcp_server.session_manager.run():
             yield
     app = FastAPI(lifespan=lifespan)
@@ -67,11 +74,11 @@ def csrf_from(response):
     return re.search(r'name="csrf" value="([^"]+)"', response.text)[1]
 
 
-def oauth(client, scopes=None):
+def oauth(client, scopes=None, client_id="test-client", callback="https://client.example/callback", client_secret=None):
     scopes = scopes or list(SCOPES)
     verifier = "x" * 64
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
-    params = {"client_id": "test-client", "redirect_uri": "https://client.example/callback",
+    params = {"client_id": client_id, "redirect_uri": callback,
               "response_type": "code", "code_challenge": challenge, "code_challenge_method": "S256",
               "scope": " ".join(scopes), "state": "state-from-client", "resource": "https://testserver/mcp"}
     response = client.get("/authorize", params=params, follow_redirects=False)
@@ -83,8 +90,10 @@ def oauth(client, scopes=None):
     assert response.status_code == 303, response.text
     args = parse_qs(urlsplit(response.headers["location"]).query)
     assert args["state"] == ["state-from-client"]
-    form = {"grant_type": "authorization_code", "client_id": "test-client", "code": args["code"][0],
-            "code_verifier": verifier, "redirect_uri": "https://client.example/callback", "resource": "https://testserver/mcp"}
+    form = {"grant_type": "authorization_code", "client_id": client_id, "code": args["code"][0],
+            "code_verifier": verifier, "redirect_uri": callback, "resource": "https://testserver/mcp"}
+    if client_secret:
+        form["client_secret"] = client_secret
     response = client.post("/token", data=form)
     assert response.status_code == 200, response.text
     client.cookies.clear()
@@ -401,8 +410,8 @@ def test_official_sdk_client_initializes_lists_and_reads(mcp_api):
     mcp_api.portal.call(check)
 
 
-def test_dynamic_registration_is_exact_allowlist_only(mcp_api):
-    form = {"redirect_uris": ["https://evil.example/callback"], "token_endpoint_auth_method": "none",
+def test_dynamic_registration_validates_callbacks_without_preconfiguration(mcp_api):
+    form = {"redirect_uris": ["http://non-loopback.example/callback"], "token_endpoint_auth_method": "none",
             "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"]}
     assert mcp_api.post("/register", json=form).status_code == 400
     form["redirect_uris"] = ["https://registered.example/callback"]
@@ -427,24 +436,10 @@ def test_consent_denial_returns_state_without_credentials(mcp_api):
     assert mcp_api.get(url).status_code == 410
 
 
-def test_external_jwt_pins_issuer_audience_subject_client_and_algorithm():
-    import jwt
-    from cryptography.hazmat.primitives.asymmetric import rsa
-    from blog_mcp.oauth import OAuthVerifier
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key()))
-    jwk.update(kid="test-key", use="sig", alg="RS256")
-    verifier = OAuthVerifier(Settings("https://testserver", "https://issuer.example", "https://issuer.example/jwks", "admin-subject", frozenset({"client"})))
-    verifier._keys, verifier._expires = [jwk], time.time() + 60
-    now = int(time.time())
-    claims = {"iss": "https://issuer.example", "aud": "https://testserver/mcp", "sub": "admin-subject",
-              "client_id": "client", "jti": "unique", "iat": now, "exp": now + 900, "scope": "blog:read"}
-    def signed(data): return jwt.encode(data, key, algorithm="RS256", headers={"kid": "test-key"})
-    async def check():
-        assert (await verifier.verify_token(signed(claims))).scopes == ["blog:read"]
-        for override in ({"iss": "https://evil.example"}, {"aud": "https://another.example"},
-                         {"sub": "other"}, {"client_id": "unregistered"}, {"exp": now+901}, {"exp": now-1}):
-            assert await verifier.verify_token(signed({**claims, **override})) is None
-        unsigned = jwt.encode(claims, "wrong-secret", algorithm="HS256", headers={"kid": "test-key"})
-        assert await verifier.verify_token(unsigned) is None
-    asyncio.run(check())
+def test_deployment_config_needs_no_client_environment(monkeypatch):
+    monkeypatch.setenv("MCP_OAUTH_CLIENTS", "invalid legacy data must not be loaded")
+    monkeypatch.delenv("MCP_OAUTH_REGISTRATION_REDIRECTS", raising=False)
+    assert Settings.from_env().resource == "https://testserver/mcp"
+    monkeypatch.setenv("MCP_OAUTH_MODE", "external")
+    with pytest.raises(RuntimeError, match="retired"):
+        Settings.from_env()
