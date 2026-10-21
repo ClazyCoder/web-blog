@@ -8,6 +8,7 @@ React + FastAPI 기반의 개인 블로그 플랫폼입니다.
 - 프론트엔드 가이드: [`client/README.md`](./client/README.md)
 - 백엔드 가이드: [`server/README.md`](./server/README.md)
 - DB 운영/마이그레이션: [`server/README_DB.md`](./server/README_DB.md)
+- MCP · OAuth · 수동 승인 · 관리자 통합: [`docs/MCP.md`](./docs/MCP.md)
 
 ## 핵심 기능
 

@@ -1,323 +1,130 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { useAuth } from '../context/useAuth';
 import api from '../utils/api';
+import './admin.css';
 
-interface OrphanImage {
-    id: number;
-    storage_key: string;
-    filename: string;
-    original_filename: string;
-    file_url: string;
-    file_size: number;
-    mime_type: string;
-    width: number | null;
-    height: number | null;
-    created_at: string | null;
-}
+interface ImageItem { id: number; filename: string; original_filename: string; file_url: string; file_size: number; created_at: string; mcp_managed?: boolean }
+interface Stats { total_active_images: number; orphan_images: number; orphan_expired: number; soft_deleted_images: number; purgeable_images: number; policy: { orphan_ttl_hours: number; soft_delete_ttl_days: number } }
+interface Change { request_id: string; state: string; action: string; target_id: number | null; client_id: string; created_at: number; expires_at: number }
+interface Connection { id: string; client_id: string; scopes: string[]; expires_at: number; csrf: string }
+interface Event { id: string; at: number; event: string; request_id: string | null; details: Record<string, unknown> }
+interface MCP { enabled: boolean; resource: string; oauth_mode: string; requests: Change[]; connections: Connection[]; events: Event[] }
+type Tab = 'requests' | 'connections' | 'images' | 'history';
+type Confirmation = { kind: 'images'; images: ImageItem[] } | { kind: 'cleanup' } | { kind: 'revoke'; connection: Connection };
+const stateLabel: Record<string, string> = { pending: '승인 대기', executed: '실행 완료', rejected: '거절', stale: '원본 변경', expired: '만료' };
+const actionLabel: Record<string, string> = { 'post.create': '글 작성', 'post.update': '글 수정', 'post.delete': '글 삭제', 'image.upload': '이미지 업로드', 'image.update': '이미지 정보 수정', 'image.replace': '이미지 교체', 'image.delete': '이미지 삭제' };
+const scopeLabel: Record<string, string> = { 'blog:read': '공개 글 읽기', 'blog:read_private': '비공개 글 읽기', 'blog:propose': '글 변경 제안', 'images:read': '공개 이미지 읽기', 'images:read_private': '비공개 이미지 읽기', 'images:propose': '이미지 변경 제안' };
+const date = (value: number) => new Date(value * 1000).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-interface OrphanStats {
-    total_active_images: number;
-    orphan_images: number;
-    orphan_expired: number;
-    soft_deleted_images: number;
-    purgeable_images: number;
-    policy: {
-        orphan_ttl_hours: number;
-        soft_delete_ttl_days: number;
-    };
-}
-
-const Admin: React.FC = () => {
+export default function Admin() {
     const { isAuthenticated, isLoading: authLoading } = useAuth();
     const navigate = useNavigate();
+    const [tab, setTab] = useState<Tab>('requests');
+    const [mcp, setMcp] = useState<MCP | null>(null);
+    const [disabled, setDisabled] = useState(false);
+    const [stats, setStats] = useState<Stats | null>(null);
+    const [images, setImages] = useState<ImageItem[]>([]);
+    const [selected, setSelected] = useState<Set<number>>(new Set());
+    const [filter, setFilter] = useState('pending');
+    const [offset, setOffset] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [message, setMessage] = useState('');
+    const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+    const [busy, setBusy] = useState(false);
+    const busyRef = useRef(false);
+    const dialog = useRef<HTMLDialogElement>(null);
 
-    const [stats, setStats] = useState<OrphanStats | null>(null);
-    const [orphanImages, setOrphanImages] = useState<OrphanImage[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
-    const [isCleaningUp, setIsCleaningUp] = useState(false);
-    const [cleanupResult, setCleanupResult] = useState<string | null>(null);
-    const [brokenImageIds, setBrokenImageIds] = useState<Set<number>>(new Set());
-
-    // 인증 안 된 경우 리다이렉트
-    useEffect(() => {
-        if (!authLoading && !isAuthenticated) {
-            navigate('/login?redirect=/admin');
+    const refresh = useCallback(async () => {
+        setLoading(true);
+        const results = await Promise.allSettled([
+            api.get<MCP>('/api/mcp/admin', { params: { offset } }),
+            api.get<Stats>('/api/upload/admin/orphans'),
+            api.get<{ images: ImageItem[] }>('/api/upload/admin/orphans/list'),
+        ]);
+        const [mcpResult, statsResult, imagesResult] = results;
+        if (mcpResult.status === 'fulfilled') { setMcp(mcpResult.value.data); setDisabled(false); }
+        else if (axios.isAxiosError(mcpResult.reason) && mcpResult.reason.response?.status === 404) { setDisabled(true); setMcp(null); }
+        else { setMcp(null); setError('MCP 정보를 불러오지 못했습니다. 새로고침 후 다시 확인해 주세요.'); }
+        if (statsResult.status === 'fulfilled') setStats(statsResult.value.data);
+        if (imagesResult.status === 'fulfilled') {
+            setImages(imagesResult.value.data.images);
+            setSelected(current => new Set([...current].filter(id => imagesResult.value.data.images.some(image => image.id === id))));
         }
-    }, [authLoading, isAuthenticated, navigate]);
+        if (statsResult.status === 'rejected' || imagesResult.status === 'rejected') setError(current => `${current} 이미지 정보를 불러오지 못했습니다. 다시 시도해 주세요.`.trim());
+        setLoading(false);
+    }, [offset]);
 
-    const fetchData = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
+    useEffect(() => { if (!authLoading && !isAuthenticated) navigate('/login?redirect=/admin'); }, [authLoading, isAuthenticated, navigate]);
+    useEffect(() => { if (isAuthenticated) void refresh(); }, [isAuthenticated, refresh]);
+    useEffect(() => { if (confirmation) dialog.current?.showModal(); else dialog.current?.close(); }, [confirmation]);
+
+    const execute = async () => {
+        if (!confirmation || busyRef.current) return;
+        busyRef.current = true;
+        setBusy(true); setError(''); setMessage('');
         try {
-            const [statsRes, listRes] = await Promise.all([
-                api.get('/api/upload/admin/orphans'),
-                api.get('/api/upload/admin/orphans/list'),
-            ]);
-            setStats(statsRes.data);
-            setOrphanImages(listRes.data.images);
-        } catch (err) {
-            console.error('Failed to fetch admin data:', err);
-            setError('데이터를 불러오는데 실패했습니다.');
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        if (isAuthenticated) {
-            fetchData();
-        }
-    }, [isAuthenticated, fetchData]);
-
-    const handleDeleteImage = async (image: OrphanImage) => {
-        if (deletingIds.has(image.id)) return;
-
-        setDeletingIds(prev => new Set(prev).add(image.id));
-        try {
-            await api.delete(`/api/upload/image/${image.filename}`);
-            setOrphanImages(prev => prev.filter(img => img.id !== image.id));
-            // 통계 업데이트
-            if (stats) {
-                setStats({
-                    ...stats,
-                    orphan_images: stats.orphan_images - 1,
-                    total_active_images: stats.total_active_images - 1,
-                });
+            if (confirmation.kind === 'images') {
+                let deleted = 0;
+                for (const image of confirmation.images) {
+                    try { await api.delete(`/api/upload/image/${encodeURIComponent(image.filename)}`); deleted++; }
+                    catch { /* Failed items remain selected for explicit retry. */ }
+                }
+                setMessage(`${confirmation.images.length}개 중 ${deleted}개 삭제 완료.`);
+                if (deleted !== confirmation.images.length) setError('일부 이미지를 삭제하지 못했습니다. 남은 항목을 확인하고 다시 시도해 주세요.');
+            } else if (confirmation.kind === 'cleanup') {
+                const { data } = await api.post('/api/upload/admin/cleanup');
+                setMessage(data.skipped ? '다른 정리 작업이 실행 중입니다. 잠시 후 다시 확인해 주세요.' : `미연결 이미지 ${data.orphan_cleanup?.deleted ?? 0}개 정리, 보존 기간이 지난 이미지 ${data.purge_soft_deleted?.purged ?? 0}개 영구 삭제.`);
+            } else {
+                const { connection } = confirmation;
+                await api.post(`/api/mcp/admin/connections/${connection.id}/revoke`, new URLSearchParams({ csrf: connection.csrf, confirm: 'revoke' }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+                setMessage('연결을 해제했습니다. 해당 연결의 토큰과 대기 중 변경 요청은 더 이상 사용할 수 없습니다.');
             }
-        } catch (err) {
-            console.error('Failed to delete image:', err);
-            alert('이미지 삭제에 실패했습니다.');
-        } finally {
-            setDeletingIds(prev => {
-                const next = new Set(prev);
-                next.delete(image.id);
-                return next;
-            });
-        }
+            setConfirmation(null);
+            await refresh();
+        } catch { setError('작업을 완료하지 못했습니다. 새로고침 후 상태를 확인해 주세요.'); }
+        finally { busyRef.current = false; setBusy(false); }
     };
 
-    const handleCleanup = async () => {
-        if (isCleaningUp) return;
-        if (!confirm('고아 이미지를 강제로 정리하시겠습니까?\n(TTL과 무관하게 모든 고아 이미지가 정리됩니다)')) return;
-
-        setIsCleaningUp(true);
-        setCleanupResult(null);
-        try {
-            const res = await api.post('/api/upload/admin/cleanup');
-            const data = res.data;
-            if (data.skipped) {
-                setCleanupResult('정리 작업이 이미 실행 중이라 이번 요청은 건너뛰었습니다. 잠시 후 다시 시도해주세요.');
-                await fetchData();
-                return;
-            }
-            const orphanDeleted = data.orphan_cleanup?.deleted ?? 0;
-            const purged = data.purge_soft_deleted?.purged ?? 0;
-            setCleanupResult(
-                `강제 정리 완료: 고아 이미지 ${orphanDeleted}개 삭제, 영구 삭제 ${purged}개 처리`
-            );
-            // 데이터 새로고침
-            await fetchData();
-        } catch (err) {
-            console.error('Cleanup failed:', err);
-            setCleanupResult('정리 작업에 실패했습니다.');
-        } finally {
-            setIsCleaningUp(false);
-        }
-    };
-
-    const formatFileSize = (bytes: number): string => {
-        if (bytes < 1024) return `${bytes} B`;
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    };
-
-    const formatDate = (dateStr: string | null): string => {
-        if (!dateStr) return '-';
-        const date = new Date(dateStr);
-        return date.toLocaleString('ko-KR', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    };
-
-    if (authLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-[60vh]">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
-            </div>
-        );
-    }
-
-    if (!isAuthenticated) return null;
-
-    return (
-        <div className="container mx-auto px-4 py-8 max-w-6xl">
-            <div className="flex items-center justify-between mb-8">
-                <h1 className="text-2xl font-bold text-gray-800">관리자 페이지</h1>
-                <button
-                    onClick={fetchData}
-                    disabled={isLoading}
-                    className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors disabled:opacity-50"
-                >
-                    새로고침
-                </button>
-            </div>
-
-            {error && (
-                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-                    {error}
-                </div>
-            )}
-
-            {/* 통계 카드 */}
-            {stats && (
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-                    <StatCard label="전체 이미지" value={stats.total_active_images} color="blue" />
-                    <StatCard label="고아 이미지" value={stats.orphan_images} color="yellow" />
-                    <StatCard label="만료된 고아" value={stats.orphan_expired} color="red" />
-                    <StatCard label="소프트 삭제됨" value={stats.soft_deleted_images} color="gray" />
-                    <StatCard label="영구 삭제 대상" value={stats.purgeable_images} color="purple" />
-                </div>
-            )}
-
-            {/* 정책 정보 & 정리 버튼 */}
-            {stats && (
-                <div className="mb-8 p-4 bg-gray-50 border border-gray-200 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="text-sm text-gray-600">
-                        <span className="font-medium">정리 정책:</span>{' '}
-                        고아 이미지 TTL {stats.policy.orphan_ttl_hours}시간 / 소프트 삭제 보존 {stats.policy.soft_delete_ttl_days}일
-                    </div>
-                    <button
-                        onClick={handleCleanup}
-                        disabled={isCleaningUp}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 shrink-0"
-                    >
-                        {isCleaningUp && (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        )}
-                        고아 이미지 강제 정리
-                    </button>
-                </div>
-            )}
-
-            {cleanupResult && (
-                <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700">
-                    {cleanupResult}
-                </div>
-            )}
-
-            {/* 고아 이미지 목록 */}
-            <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-800">
-                    고아 이미지 목록
-                    {!isLoading && (
-                        <span className="ml-2 text-sm font-normal text-gray-500">
-                            ({orphanImages.length}개)
-                        </span>
-                    )}
-                </h2>
-            </div>
-
-            {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
-                </div>
-            ) : orphanImages.length === 0 ? (
-                <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border border-gray-200">
-                    고아 이미지가 없습니다.
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {orphanImages.map((image) => (
-                        <div
-                            key={image.id}
-                            className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
-                        >
-                            {/* 이미지 미리보기 */}
-                            <div className="aspect-video bg-gray-100 relative overflow-hidden">
-                                {brokenImageIds.has(image.id) ? (
-                                    <div className="flex items-center justify-center h-full text-gray-400 text-sm">미리보기 불가</div>
-                                ) : (
-                                    <img
-                                        src={image.file_url}
-                                        alt={image.original_filename}
-                                        className="w-full h-full object-contain"
-                                        loading="lazy"
-                                        onError={() => {
-                                            setBrokenImageIds(prev => new Set(prev).add(image.id));
-                                        }}
-                                    />
-                                )}
-                            </div>
-
-                            {/* 이미지 정보 */}
-                            <div className="p-3">
-                                <p className="text-sm font-medium text-gray-800 truncate" title={image.original_filename}>
-                                    {image.original_filename}
-                                </p>
-                                <div className="mt-1 space-y-0.5 text-xs text-gray-500">
-                                    <p>크기: {formatFileSize(image.file_size)}</p>
-                                    {image.width && image.height && (
-                                        <p>해상도: {image.width} x {image.height}</p>
-                                    )}
-                                    <p>업로드: {formatDate(image.created_at)}</p>
-                                </div>
-
-                                {/* 삭제 버튼 */}
-                                <button
-                                    onClick={() => handleDeleteImage(image)}
-                                    disabled={deletingIds.has(image.id)}
-                                    className="mt-3 w-full px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium rounded transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
-                                >
-                                    {deletingIds.has(image.id) ? (
-                                        <>
-                                            <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-red-600"></div>
-                                            삭제 중...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                            삭제
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-};
-
-// 통계 카드 컴포넌트
-const StatCard: React.FC<{
-    label: string;
-    value: number;
-    color: 'blue' | 'yellow' | 'red' | 'gray' | 'purple';
-}> = ({ label, value, color }) => {
-    const colorMap = {
-        blue: 'bg-blue-50 border-blue-200 text-blue-700',
-        yellow: 'bg-yellow-50 border-yellow-200 text-yellow-700',
-        red: 'bg-red-50 border-red-200 text-red-700',
-        gray: 'bg-gray-50 border-gray-200 text-gray-700',
-        purple: 'bg-purple-50 border-purple-200 text-purple-700',
-    };
-
-    return (
-        <div className={`p-4 rounded-lg border ${colorMap[color]}`}>
-            <p className="text-xs font-medium opacity-75">{label}</p>
-            <p className="text-2xl font-bold mt-1">{value}</p>
-        </div>
-    );
-};
-
-export default Admin;
+    if (authLoading || !isAuthenticated) return <p className="admin-loading" role="status">관리자 계정 확인 중…</p>;
+    const visible = mcp?.requests.filter(r => filter === 'all' || r.state === filter) ?? [];
+    const pending = mcp?.requests.filter(r => r.state === 'pending').length ?? 0;
+    return <div className="admin-hub">
+        <header className="admin-heading"><div><p className="admin-eyebrow">블로그 관리</p><h1>MCP 및 이미지 관리</h1><p>AI의 변경 제안을 검토하고 연결 권한과 이미지를 관리할 수 있습니다.</p></div><button onClick={() => { setError(''); void refresh(); }} disabled={loading || busy}>새로고침</button></header>
+        <nav className="admin-tabs" aria-label="관리 영역">
+            {([['requests', '승인 요청'], ['connections', '연결·권한'], ['images', '이미지'], ['history', '처리 이력']] as const).map(([key, label]) => <button key={key} aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>{label}{key === 'requests' && pending > 0 && <span className="admin-count">{pending}</span>}</button>)}
+        </nav>
+        {error && <p role="alert" className="admin-alert">{error}</p>}
+        {message && <p role="status" className="admin-notice">{message}</p>}
+        {loading && <p role="status" className="admin-muted">최신 상태를 불러오는 중…</p>}
+        {disabled && tab !== 'images' && <section className="admin-empty"><h2>MCP가 비활성화되어 있습니다</h2><p>서버의 MCP와 OAuth 클라이언트 설정을 완료한 뒤 다시 확인해 주세요. 이미지 관리는 사용할 수 있습니다.</p><button onClick={() => setTab('images')}>이미지 관리 열기</button></section>}
+        {tab === 'requests' && mcp && <section aria-label="승인 요청 목록">
+            <div className="admin-toolbar"><div><h2>변경 승인 요청</h2><p>연결을 허용한 후에도 글과 이미지 변경은 건별로 승인해야 합니다.</p></div><label>표시 <select value={filter} onChange={e => setFilter(e.target.value)}><option value="pending">승인 대기</option><option value="all">전체 상태</option><option value="executed">실행 완료</option><option value="rejected">거절</option><option value="stale">원본 변경</option><option value="expired">만료</option></select></label></div>
+            {visible.length === 0 ? <div className="admin-empty"><h3>표시할 요청이 없습니다</h3><p>AI가 제안한 변경 사항이 여기에 표시됩니다.</p></div> : <div className="admin-rows">{visible.map(r => <article key={r.request_id} className="admin-request"><div><span className={`admin-badge ${r.state === 'pending' ? 'pending' : ''}`}>{stateLabel[r.state] ?? r.state}</span><h3>{actionLabel[r.action] ?? r.action}{r.target_id ? ` · #${r.target_id}` : ''}</h3><p>{r.client_id} · {date(r.created_at)}</p>{r.state === 'pending' && <small>{date(r.expires_at)}까지 검토</small>}</div><a className="admin-button" href={`/api/mcp/review/${encodeURIComponent(r.request_id)}`}>{r.state === 'pending' ? '변경 검토' : '상세 보기'} <span aria-hidden="true">↗</span></a></article>)}</div>}
+            <div className="admin-pagination"><button disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - 50))}>이전</button><span>{offset / 50 + 1}페이지 · 최대 50개</span><button disabled={mcp.requests.length < 50 || loading} onClick={() => setOffset(offset + 50)}>다음</button></div>
+        </section>}
+        {tab === 'connections' && mcp && <section>
+            <div className="admin-toolbar"><div><h2>MCP 연결·권한</h2><p>클라이언트에 아래 서버 주소를 등록한 뒤 브라우저에서 권한을 선택해 주세요.</p></div></div>
+            <div className="admin-endpoint"><span>서버 주소</span><code>{mcp.resource}</code><span className="admin-badge">{mcp.oauth_mode === 'local' ? '블로그 OAuth' : '외부 OAuth'}</span></div>
+            {mcp.connections.length === 0 ? <div className="admin-empty">활성 연결이 없습니다. MCP 클라이언트에서 연결을 시작해 주세요.</div> : mcp.connections.map(connection => <article className="admin-connection" key={connection.id}><div><h3>{connection.client_id}</h3><p>{date(connection.expires_at)}까지 유효</p><div className="admin-scopes">{connection.scopes.map(scope => <span key={scope}>{scopeLabel[scope] ?? scope}</span>)}</div></div><button onClick={() => setConfirmation({ kind: 'revoke', connection })} disabled={busy}>연결 해제</button></article>)}
+            <p className="admin-muted">연결을 해제하면 해당 토큰과 승인 대기 요청이 즉시 무효화됩니다. 이미 실행한 변경은 유지됩니다.</p>
+        </section>}
+        {tab === 'images' && <section>
+            <div className="admin-toolbar"><div><h2>미연결 이미지</h2><p>글에 연결되지 않은 이미지를 선택하여 정리할 수 있습니다.</p></div><details className="admin-more"><summary>추가 작업</summary><button onClick={() => setConfirmation({ kind: 'cleanup' })} disabled={busy}>미연결 이미지 일괄 정리</button><p>MCP 보존 이미지는 일괄 정리에서 제외됩니다.</p></details></div>
+            {stats && <dl className="admin-stats"><div><dt>전체 이미지</dt><dd>{stats.total_active_images}</dd></div><div><dt>미연결</dt><dd>{stats.orphan_images}</dd></div><div><dt>자동 정리 대상</dt><dd>{stats.orphan_expired}</dd></div><div><dt>소프트 삭제</dt><dd>{stats.soft_deleted_images}</dd></div><div><dt>영구 삭제 대상</dt><dd>{stats.purgeable_images}</dd></div></dl>}
+            <div className="admin-selection"><label><input type="checkbox" checked={images.length > 0 && selected.size === images.length} onChange={e => setSelected(e.target.checked ? new Set(images.map(i => i.id)) : new Set())} /> 전체 선택</label><span>{selected.size}개 선택</span>{selected.size > 0 && <button className="admin-danger" disabled={busy} onClick={() => setConfirmation({ kind: 'images', images: images.filter(i => selected.has(i.id)) })}>선택 항목 삭제</button>}</div>
+            {images.length === 0 ? <div className="admin-empty">미연결 이미지가 없습니다.</div> : <div className="admin-image-grid">{images.map(image => <label className={`admin-image ${selected.has(image.id) ? 'selected' : ''}`} key={image.id}><input type="checkbox" aria-label={`${image.original_filename} 선택`} checked={selected.has(image.id)} onChange={e => setSelected(current => { const next = new Set(current); if (e.target.checked) next.add(image.id); else next.delete(image.id); return next; })} /><img src={image.file_url} alt="" loading="lazy" /><div><strong title={image.original_filename}>{image.original_filename}</strong><small>{(image.file_size / 1024).toFixed(1)} KB · {new Date(image.created_at).toLocaleDateString('ko-KR')}</small>{image.mcp_managed && <span className="admin-badge">MCP 보존</span>}</div></label>)}</div>}
+            {stats && <p className="admin-muted">일반 미연결 이미지는 {stats.policy.orphan_ttl_hours}시간 후 정리하고, 소프트 삭제 이미지는 {stats.policy.soft_delete_ttl_days}일 후 영구 삭제합니다. MCP 보존 이미지는 자동 정리에서 제외됩니다.</p>}
+        </section>}
+        {tab === 'history' && mcp && <section><div className="admin-toolbar"><div><h2>최근 처리 이력</h2><p>최근 50개 기록 · 비밀번호와 토큰 원문은 기록하지 않습니다.</p></div></div>{mcp.events.length === 0 ? <div className="admin-empty">처리 이력이 없습니다.</div> : <ol className="admin-history">{mcp.events.map(event => <li key={event.id}><time>{date(event.at)}</time><div><strong>{event.event}</strong>{event.request_id && <a href={`/api/mcp/review/${encodeURIComponent(event.request_id)}`}>요청 보기</a>}<details><summary>기록 상세</summary><pre>{JSON.stringify(event.details, null, 2)}</pre></details></div></li>)}</ol>}</section>}
+        <dialog ref={dialog} className="admin-dialog" aria-labelledby="admin-confirm-title" onCancel={e => { if (busy) e.preventDefault(); else setConfirmation(null); }}>
+            <h2 id="admin-confirm-title">{confirmation?.kind === 'revoke' ? '이 연결을 해제하시겠습니까?' : confirmation?.kind === 'cleanup' ? '미연결 이미지를 일괄 정리하시겠습니까?' : '선택한 이미지를 삭제하시겠습니까?'}</h2>
+            {confirmation?.kind === 'images' && <><p>선택한 {confirmation.images.length}개 이미지의 파일을 영구 삭제합니다. 직접 선택한 MCP 보존 이미지도 삭제됩니다.</p><ul>{confirmation.images.map(i => <li key={i.id}>{i.original_filename}</li>)}</ul></>}
+            {confirmation?.kind === 'cleanup' && <p>일반 미연결 이미지는 경과 시간과 관계없이 삭제하고, 보존 기간이 지난 삭제 이미지도 영구 삭제합니다. MCP 보존 이미지는 제외됩니다.</p>}
+            {confirmation?.kind === 'revoke' && <p>{confirmation.connection.client_id}의 연결을 해제합니다. 기존 토큰과 대기 중 요청이 무효화됩니다.</p>}
+            {error && <p role="alert">{error}</p>}<div className="admin-dialog-actions"><button disabled={busy} onClick={() => setConfirmation(null)}>취소</button><button disabled={busy} className="admin-danger" onClick={() => void execute()}>{busy ? '처리 중…' : confirmation?.kind === 'revoke' ? '연결 해제' : '삭제 실행'}</button></div>
+        </dialog>
+    </div>;
+}

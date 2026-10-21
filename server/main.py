@@ -5,7 +5,7 @@ FastAPI 기반 블로그 서버
 
 import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, AsyncExitStack
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
@@ -48,7 +48,10 @@ async def lifespan(app: FastAPI):
 
     # Startup: 백그라운드 태스크 시작
     cleanup_task = asyncio.create_task(start_cleanup_scheduler())
-    yield
+    async with AsyncExitStack() as stack:
+        if getattr(app.state, "mcp_server", None):
+            await stack.enter_async_context(app.state.mcp_server.session_manager.run())
+        yield
     # Shutdown: 백그라운드 태스크 정리
     cleanup_task.cancel()
     try:
@@ -166,6 +169,11 @@ def main():
         reload=True,  # 개발 모드에서 자동 리로드
         log_level="info"
     )
+
+
+if os.getenv("MCP_ENABLED", "false").lower() == "true":
+    from blog_mcp.install import install_mcp
+    install_mcp(app)
 
 
 if __name__ == "__main__":

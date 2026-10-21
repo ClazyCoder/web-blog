@@ -380,7 +380,7 @@ async def delete_image(
         db: 비동기 데이터베이스 세션
     """
     # DB에서 이미지 정보 조회 (storage_key 정확 매칭)
-    stmt = select(Image).filter(Image.storage_key == f"images/{filename}")
+    stmt = select(Image).filter(Image.storage_key == f"images/{filename}").with_for_update()
     result = await db.execute(stmt)
     image = result.scalar_one_or_none()
 
@@ -452,6 +452,7 @@ async def get_orphan_stats(
             Image.post_id.is_(None),
             Image.deleted_at.is_(None),
             Image.created_at < cutoff,
+            Image.mcp_managed.is_(False),
         )
     )
     expired_count = (await db.execute(expired_stmt)).scalar() or 0
@@ -468,6 +469,7 @@ async def get_orphan_stats(
         and_(
             Image.deleted_at.isnot(None),
             Image.deleted_at < purge_cutoff,
+            Image.mcp_managed.is_(False),
         )
     )
     purgeable_count = (await db.execute(purgeable_stmt)).scalar() or 0

@@ -74,6 +74,14 @@ services:
       # Open Graph 메타태그용 사이트 정보
       SITE_URL: ${SITE_URL:?SITE_URL is required (public origin, e.g. https://blog.example.com)}
       SITE_NAME: ${SITE_NAME:-YSG Blog}
+      MCP_ENABLED: ${MCP_ENABLED:-false}
+      MCP_OAUTH_MODE: ${MCP_OAUTH_MODE:-local}
+      MCP_OAUTH_CLIENTS: ${MCP_OAUTH_CLIENTS:-[]}
+      MCP_OAUTH_REGISTRATION_REDIRECTS: ${MCP_OAUTH_REGISTRATION_REDIRECTS:-}
+      MCP_OAUTH_ISSUER: ${MCP_OAUTH_ISSUER:-}
+      MCP_OAUTH_JWKS_URL: ${MCP_OAUTH_JWKS_URL:-}
+      MCP_OAUTH_ADMIN_SUBJECT: ${MCP_OAUTH_ADMIN_SUBJECT:-}
+      MCP_OAUTH_CLIENT_IDS: ${MCP_OAUTH_CLIENT_IDS:-}
       # CORS (Docker 내부에서는 nginx 프록시로 same-origin)
       CORS_ORIGINS: "http://localhost,http://localhost:80"
       # 타임존

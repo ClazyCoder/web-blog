@@ -15,6 +15,7 @@ os.environ.update(
     REDIS_URL="",
     TRUSTED_PROXY_HOST="",
     DB_HOST="",
+    MCP_ENABLED="false",
 )
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -62,6 +63,11 @@ class FakeRedis:
         self.check()
         return int(key in self.values)
 
+    async def eval(self, script, numkeys, key):
+        self.check()
+        self.values[key] = self.values.get(key, 0) + 1
+        return self.values[key]
+
 
 @pytest.fixture
 def api(tmp_path, monkeypatch):
@@ -107,6 +113,7 @@ def api(tmp_path, monkeypatch):
     client = TestClient(app, base_url="https://testserver")
     client.headers["Origin"] = "https://testserver"
     client.store = store
+    client.sessions = sessions
     client.admin_headers = {"Authorization": f"Bearer {auth.create_access_token({'sub': 'admin'})}"}
     yield client
     client.close()

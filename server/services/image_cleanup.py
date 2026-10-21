@@ -44,13 +44,14 @@ async def cleanup_orphan_images(db: AsyncSession, force: bool = False) -> dict:
         Image.is_temporary.is_(True),
         Image.post_id.is_(None),
         Image.deleted_at.is_(None),
+        Image.mcp_managed.is_(False),
     ]
     cutoff = None
     if not force:
         cutoff = datetime.now() - timedelta(hours=ORPHAN_TTL_HOURS)
         conditions.append(Image.created_at < cutoff)
 
-    stmt = select(Image).where(and_(*conditions))
+    stmt = select(Image).where(and_(*conditions)).with_for_update()
     result = await db.execute(stmt)
     orphans = result.scalars().all()
     
@@ -95,9 +96,10 @@ async def purge_soft_deleted_images(db: AsyncSession) -> dict:
         and_(
             Image.deleted_at.isnot(None),
             Image.deleted_at < cutoff,
+            Image.mcp_managed.is_(False),
         )
     )
-    result = await db.execute(stmt)
+    result = await db.execute(stmt.with_for_update())
     expired = result.scalars().all()
     
     purged_count = 0

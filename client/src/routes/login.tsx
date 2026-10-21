@@ -19,12 +19,16 @@ const Login: React.FC = () => {
     const location = useLocation();
 
     // 이전 페이지 경로를 가져옵니다 (없으면 홈으로)
-    const from = (location.state as LoginLocationState | null)?.from?.pathname || '/';
+    const requested = new URLSearchParams(location.search).get('redirect')
+        || (location.state as LoginLocationState | null)?.from?.pathname || '/';
+    // Only same-origin paths. OAuth review routes need a full document load.
+    const from = requested.startsWith('/') && !requested.startsWith('//') && !requested.includes('\\') ? requested : '/';
 
     // 이미 로그인된 경우 리다이렉트
     useEffect(() => {
         if (isAuthenticated) {
-            navigate(from, { replace: true });
+            if (from.startsWith('/api/mcp/')) window.location.replace(from);
+            else navigate(from, { replace: true });
         }
     }, [isAuthenticated, navigate, from]);
 
@@ -44,7 +48,8 @@ const Login: React.FC = () => {
 
             if (success) {
                 // 로그인 성공 시 이전 페이지로 이동
-                navigate(from, { replace: true });
+                if (from.startsWith('/api/mcp/')) window.location.replace(from);
+                else navigate(from, { replace: true });
             } else {
                 setError('로그인에 실패했습니다. 사용자명과 비밀번호를 확인해주세요.');
             }

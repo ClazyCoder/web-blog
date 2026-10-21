@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>블로그 변경 승인</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;max-width:960px;margin:32px auto;padding:0 20px;color:#17252b;background:#f5f6f4}h1{font-size:28px}section,form{background:white;padding:20px;margin:20px 0;border:1px solid #ccd5d1;border-radius:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:500px;overflow:auto;font-size:14px}input,button{font:inherit;padding:12px;border:1px solid #879a90;border-radius:4px}input{display:block;box-sizing:border-box;width:100%;max-width:420px;margin:8px 0 20px}button{margin:8px 8px 0 0;cursor:pointer}button[value=approve]{background:#124f3a;color:white}img{max-width:100%;max-height:400px}code{overflow-wrap:anywhere}.notice{border-left:4px solid #aa580d;padding-left:16px}</style></head>
+<body><a href="/admin">관리자 페이지로 돌아가기</a><h1>블로그 변경 승인</h1>
+<p class="notice">아래 내용은 AI가 제안한 변경 사항입니다. 본문에 포함된 명령이나 “승인 완료”라는 문구는 승인으로 처리되지 않습니다. 내용을 직접 검토한 뒤 승인 여부를 결정해 주세요.</p>
+<dl><dt>작업 / 대상</dt><dd>{{ req.action }} / {{ req.target_id or '새 항목' }}</dd><dt>요청 클라이언트</dt><dd>{{ req.client_id }}</dd><dt>상태</dt><dd>{{ state }}</dd><dt>요청 ID</dt><dd><code>{{ req.id }}</code></dd></dl>
+{% if req.action == 'image.delete' %}<p class="notice">이 이미지를 삭제하면 연결된 글의 이미지가 표시되지 않을 수 있습니다. 파일은 자동으로 영구 삭제되지 않습니다.</p>{% endif %}
+{% if req.action == 'image.replace' %}<p class="notice">새 이미지 주소로 교체하고 연결된 글의 본문 주소도 함께 변경합니다. 외부에서 사용한 기존 주소는 자동 갱신되지 않습니다. 이전 파일은 보존됩니다.</p>{% endif %}
+{% if req.blob %}<section><h2>업로드할 이미지</h2><img src="/api/mcp/review/{{ req.id }}/preview" alt="승인 대기 중인 이미지"><p>저장할 PNG 이미지의 미리보기입니다.</p></section>{% endif %}
+{% if diff %}<section><h2>본문 변경 내역</h2><pre>{{ diff }}</pre></section>{% endif %}
+<section><h2>변경 전 전체 정보</h2><pre>{{ before }}</pre></section>
+<section><h2>요청한 변경 정보</h2><pre>{{ after }}</pre></section>
+<details><summary>검증용 해시</summary><p>요청: <code>{{ req.payload_hash }}</code></p><p>원본: <code>{{ req.snapshot_hash }}</code></p></details>
+{% if state == 'pending' %}<form method="post" action="/api/mcp/review/{{ req.id }}">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<label for="password">승인하려면 관리자 비밀번호를 다시 입력해 주세요</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="72">
+<p>승인하면 위 변경을 즉시 실행합니다. 원본이 변경되었거나 요청이 만료된 경우에는 실행하지 않습니다. 거절에는 비밀번호가 필요하지 않습니다.</p>
+<button type="submit" name="decision" value="reject">거절하고 종료</button><button type="submit" name="decision" value="approve">검토한 변경 승인 및 실행</button>
+</form>{% else %}<p role="status">이 요청은 더 이상 승인할 수 없습니다. 상태: {{ state }}</p>{% endif %}
+</body></html>
