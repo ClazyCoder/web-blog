@@ -391,8 +391,7 @@ async def delete_image(
         # 실제 파일 삭제
         # storage_key에서 실제 파일 경로 추출
         file_path = UPLOAD_DIR / image.filename
-        if file_path.exists():
-            file_path.unlink()
+        file_path.unlink(missing_ok=True)
 
         # DB에서 소프트 삭제 (개선: deleted_at 사용)
         image.deleted_at = datetime.now()

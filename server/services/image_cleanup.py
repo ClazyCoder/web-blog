@@ -62,17 +62,19 @@ async def cleanup_orphan_images(db: AsyncSession, force: bool = False) -> dict:
         try:
             # 실제 파일 삭제
             file_path = UPLOAD_DIR / img.filename
-            if file_path.exists():
-                file_path.unlink()
-            
-            # DB soft-delete
-            img.deleted_at = datetime.now()
-            deleted_count += 1
-        except Exception as e:
+            file_path.unlink(missing_ok=True)
+        except OSError as e:
             errors.append(f"Image {img.id} ({img.storage_key}): {str(e)}")
+            continue
+
+        # Only mark images deleted after file removal succeeds.
+        img.deleted_at = datetime.now()
+        deleted_count += 1
     
-    if orphans:
+    if deleted_count:
         await db.commit()
+    else:
+        await db.rollback()
     
     return {
         "type": "orphan_cleanup",
@@ -109,17 +111,19 @@ async def purge_soft_deleted_images(db: AsyncSession) -> dict:
         try:
             # 실제 파일 삭제 (아직 남아있는 경우)
             file_path = UPLOAD_DIR / img.filename
-            if file_path.exists():
-                file_path.unlink()
-            
-            # DB 하드 삭제
-            await db.delete(img)
-            purged_count += 1
-        except Exception as e:
+            file_path.unlink(missing_ok=True)
+        except OSError as e:
             errors.append(f"Image {img.id} ({img.storage_key}): {str(e)}")
+            continue
+
+        # Database failures must abort the transaction, not become item errors.
+        await db.delete(img)
+        purged_count += 1
     
-    if expired:
+    if purged_count:
         await db.commit()
+    else:
+        await db.rollback()
     
     return {
         "type": "purge_soft_deleted",
@@ -177,6 +181,7 @@ async def run_cleanup(use_lock: bool = True, force_orphan_cleanup: bool = False)
                 return summary
                 
             except Exception as e:
+                await db.rollback()
                 logger.error(f"Image cleanup failed: {str(e)}")
                 return {
                     "timestamp": datetime.now().isoformat(),
